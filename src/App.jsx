@@ -18,7 +18,7 @@ import {
 } from 'firebase/firestore';
 
 // ==========================================
-// 0. Firebase 配置
+// 模块 1: 配置与常量 (Config & Constants)
 // ==========================================
 const YOUR_FIREBASE_CONFIG = {
   apiKey: "AIzaSyA5q760qD5nN4Jp8i70z4sudY7HBIEMrC4",
@@ -36,9 +36,6 @@ const ADMIN_EMAILS = [
   "xiongqiuting@gmail.com"
 ];
 
-// ==========================================
-// 1. 静态数据与工具函数
-// ==========================================
 const METADATA_DB = {
   "爱":"上下结构|爪|10", "吧":"左右结构|口|7", "帮":"上下结构|巾|9", "包":"半包围结构|勹|5", "宝":"上下结构|宀|8",
   "本":"独体字|木|5", "笔":"上下结构|竹|10", "别":"左右结构|刂|7", "不":"独体字|一|4", "长":"独体字|长|4",
@@ -52,6 +49,9 @@ const RICH_DATA_MAP = new Map([
 
 const STRUCTURE_OPTIONS = ["独体字", "左右结构", "上下结构", "左中右结构", "上中下结构", "全包围结构", "半包围结构", "品字形结构"];
 
+// ==========================================
+// 模块 2: 工具函数 (Utils)
+// ==========================================
 const sanitizeWords = (wordsData) => {
     if (!wordsData) return [];
     if (Array.isArray(wordsData)) return wordsData;
@@ -59,10 +59,8 @@ const sanitizeWords = (wordsData) => {
     return [];
 };
 
-// [修改] 更严格的标准化函数，移除所有标点符号和空格，只保留汉字、字母和数字
 const normalizeText = (text) => {
   if (!text) return '';
-  // 匹配所有非汉字、非字母、非数字的字符并将它们替换为空
   return text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, "").toLowerCase();
 };
 
@@ -92,39 +90,147 @@ const lookupCharData = (char) => {
     return result;
 };
 
-// Firestore Helpers
+// Firestore Path Generators
 const getAppId = () => typeof __app_id !== 'undefined' ? __app_id : null;
-
-// [修改] 根据要求使用特定的集合路径逻辑
 const getHanziCollection = (db) => {
     const isPreview = typeof __app_id !== 'undefined' && __app_id;
-    if (isPreview) {
-        return collection(db, 'artifacts', __app_id, 'public', 'data', 'characters');
-    } else {
-        return collection(db, 'characters');
-    }
+    return isPreview ? collection(db, 'artifacts', __app_id, 'public', 'data', 'characters') : collection(db, 'characters');
 };
-
 const getLeaderboardCollection = (db) => {
     const isPreview = typeof __app_id !== 'undefined' && __app_id;
-    if (isPreview) {
-        return collection(db, 'artifacts', __app_id, 'public', 'data', 'leaderboards');
-    } else {
-        return collection(db, 'leaderboards');
-    }
+    return isPreview ? collection(db, 'artifacts', __app_id, 'public', 'data', 'leaderboards') : collection(db, 'leaderboards');
 };
-
 const getUserCustomCollection = (db, userId) => {
     const isPreview = typeof __app_id !== 'undefined' && __app_id;
-    if (isPreview) {
-        return collection(db, 'artifacts', __app_id, 'users', userId, 'custom_words');
-    } else {
-        return collection(db, 'users', userId, 'custom_words');
-    }
+    return isPreview ? collection(db, 'artifacts', __app_id, 'users', userId, 'custom_words') : collection(db, 'users', userId, 'custom_words');
 };
 
 // ==========================================
-// 2. 基础组件
+// 模块 3: 自定义 Hooks (Logic Layer)
+// ==========================================
+
+const useAuth = (firebaseApp) => {
+    const [user, setUser] = useState(null);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [isManualAdmin, setIsManualAdmin] = useState(false);
+    const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+    const auth = useRef(null);
+
+    useEffect(() => {
+        if (!firebaseApp) return;
+        auth.current = getAuth(firebaseApp);
+        
+        const initAuth = async () => {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await signInWithCustomToken(auth.current, __initial_auth_token);
+            } else {
+                await signInAnonymously(auth.current);
+            }
+        };
+        initAuth();
+
+        return onAuthStateChanged(auth.current, (currentUser) => {
+            setUser(currentUser);
+        });
+    }, [firebaseApp]);
+
+    const isAdmin = useMemo(() => 
+        isManualAdmin || (user && user.email && ADMIN_EMAILS.includes(user.email)), 
+    [user, isManualAdmin]);
+
+    const login = async () => {
+        if (!auth.current) { setIsManualAdmin(true); setIsAuthModalOpen(false); return; }
+        setIsProcessing(true);
+        try { await signInWithPopup(auth.current, new GoogleAuthProvider()); } 
+        catch (error) { if(confirm("登录受阻。开启演示模式？")) setIsManualAdmin(true); }
+        setIsProcessing(false);
+        setIsAuthModalOpen(false);
+    };
+
+    const logout = async () => {
+        if (auth.current) { await signOut(auth.current); await signInAnonymously(auth.current); }
+        setIsManualAdmin(false);
+    };
+
+    return { 
+        user, isAdmin, isManualAdmin, isProcessing, 
+        isAuthModalOpen, setIsAuthModalOpen, 
+        login, logout 
+    };
+};
+
+const useHanziData = (firebaseApp, user) => {
+    const [database, setDatabase] = useState([]);
+    const [customWords, setCustomWords] = useState([]);
+    const db = useRef(null);
+
+    useEffect(() => {
+        if (!firebaseApp) return;
+        db.current = getFirestore(firebaseApp);
+    }, [firebaseApp]);
+
+    useEffect(() => {
+        if (!db.current || !user) return;
+        const unsubscribe = onSnapshot(getHanziCollection(db.current), (snapshot) => {
+            const data = [];
+            snapshot.forEach(doc => data.push({ ...doc.data(), id: doc.id }));
+            data.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+            setDatabase(data);
+        });
+        return () => unsubscribe();
+    }, [user]);
+
+    useEffect(() => {
+        if (!db.current || !user || user.isAnonymous) { setCustomWords([]); return; }
+        const unsubscribe = onSnapshot(getUserCustomCollection(db.current, user.uid), (snapshot) => {
+            const data = [];
+            snapshot.forEach(doc => data.push({ ...doc.data(), id: doc.id }));
+            setCustomWords(data);
+        }, (err) => console.log("Private DB skip"));
+        return () => unsubscribe();
+    }, [user]);
+
+    const saveChar = async (charData) => {
+        if (!db.current) return;
+        const docRef = doc(getHanziCollection(db.current), charData.char);
+        const saveData = { ...charData, updatedAt: new Date().toISOString(), updatedBy: user?.email || 'admin' };
+        delete saveData.id;
+        await setDoc(docRef, saveData);
+    };
+
+    const addCustomWord = async (wordData) => {
+        if (!db.current || !user) return;
+        await addDoc(getUserCustomCollection(db.current, user.uid), { ...wordData, createdAt: new Date().toISOString() });
+    };
+
+    const deleteCustomWord = async (id) => {
+        if (!db.current || !user) return;
+        await deleteDoc(doc(getUserCustomCollection(db.current, user.uid), id));
+    };
+
+    const batchImport = async (dataArray) => {
+        if (!db.current) return;
+        const batch = writeBatch(db.current);
+        const collRef = getHanziCollection(db.current);
+        let count = 0;
+        dataArray.forEach(item => {
+            if (!item.char) return;
+            const saveData = { ...item, updatedAt: new Date().toISOString() };
+            batch.set(doc(collRef, item.char), saveData);
+            count++;
+        });
+        await batch.commit();
+        alert(`成功导入 ${count} 条数据`);
+    };
+
+    return { 
+        database, customWords, dbInstance: db.current,
+        saveChar, addCustomWord, deleteCustomWord, batchImport 
+    };
+};
+
+// ==========================================
+// 模块 4: UI 组件 (Components)
 // ==========================================
 
 const HanziWriterBoard = ({ char }) => {
@@ -194,9 +300,7 @@ const HanziWriterBoard = ({ char }) => {
   );
 };
 
-// ==========================================
-// 3. 模态框组件
-// ==========================================
+// --- Modals ---
 
 const AuthModal = ({ isOpen, onClose, onLogin, isProcessing }) => {
     if(!isOpen) return null;
@@ -213,7 +317,7 @@ const AuthModal = ({ isOpen, onClose, onLogin, isProcessing }) => {
     );
 };
 
-const CustomWordsModal = ({ isOpen, onClose, customWords, onAdd, onDelete, isAdding }) => {
+const CustomWordsModal = ({ isOpen, onClose, customWords, onAdd, onDelete }) => {
     const [newWord, setNewWord] = useState({ char: '', pinyin: '', sentence: '', definition: '' });
     if (!isOpen) return null;
     return (
@@ -229,7 +333,7 @@ const CustomWordsModal = ({ isOpen, onClose, customWords, onAdd, onDelete, isAdd
                          <input className="p-2 border rounded" placeholder="拼音" value={newWord.pinyin} onChange={e=>setNewWord({...newWord, pinyin:e.target.value})}/>
                          <input className="p-2 border rounded col-span-2" placeholder="例句" value={newWord.sentence} onChange={e=>setNewWord({...newWord, sentence:e.target.value})}/>
                          <input className="p-2 border rounded col-span-2" placeholder="释义" value={newWord.definition} onChange={e=>setNewWord({...newWord, definition:e.target.value})}/>
-                         <button onClick={() => {if(newWord.char) { onAdd(newWord); setNewWord({char:'',pinyin:'',sentence:'',definition:''}); }}} disabled={isAdding || !newWord.char} className="col-span-2 bg-teal-600 text-white py-2 rounded font-bold">{isAdding ? "添加中..." : "添加生词"}</button>
+                         <button onClick={() => {if(newWord.char) { onAdd(newWord); setNewWord({char:'',pinyin:'',sentence:'',definition:''}); }}} disabled={!newWord.char} className="col-span-2 bg-teal-600 text-white py-2 rounded font-bold">添加生词</button>
                      </div>
                      {customWords.map(w => (
                          <div key={w.id} className="flex justify-between items-center p-3 border rounded-lg hover:bg-slate-50">
@@ -253,14 +357,12 @@ const ImportJsonModal = ({ isOpen, onClose, onImport }) => {
         try {
             const data = JSON.parse(jsonText);
             if (!Array.isArray(data)) throw new Error("JSON 格式错误：必须是一个数组 []");
-            if (data.length > 0 && !data[0].char) throw new Error("JSON 数据缺少 'char' 字段");
             await onImport(data);
             setJsonText(""); onClose();
         } catch (e) { setErrorMsg(e.message); } finally { setIsProcessing(false); }
     };
 
     if (!isOpen) return null;
-
     return (
         <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl h-[80vh] flex flex-col">
@@ -282,37 +384,24 @@ const ImportJsonModal = ({ isOpen, onClose, onImport }) => {
     );
 };
 
-// [改进] 游戏设置弹窗 (支持内容类型选择)
+// [修复] 恢复 GameSettingsModal 组件，确保它被定义
 const GameSettingsModal = ({ isOpen, onClose, onStart, database, userRole, hasCustomWords, gameType }) => {
     const [count, setCount] = useState(10);
     const [filterVol, setFilterVol] = useState("all");
     const [filterLesson, setFilterLesson] = useState("all");
     const [includeCustom, setIncludeCustom] = useState(false);
     
-    // 新增：内容类型状态
     const [contentType, setContentType] = useState('chars'); 
 
-    // 根据游戏类型自动切换默认的内容类型
     useEffect(() => {
         if (!isOpen) return;
         switch (gameType) {
-            case 'splitMatch': // 连词大作战 -> 必须是词语
-                setContentType('words');
-                break;
-            case 'readMatch': // 朗读挑战 -> 必须是例句(或词语)
-                setContentType('sentences');
-                break;
-            case 'pinyinMatch': // 拼音对对碰 -> 主要是生字，现在支持选词语
-                setContentType('chars');
-                break;
-            case 'geneMatch': // 基因匹配 -> 默认词语，也可生字
-                setContentType('words'); 
-                break;
-            case 'flashcards': // 闪卡 -> 默认生字，也可词语
-                setContentType('chars');
-                break;
-            default:
-                setContentType('chars');
+            case 'splitMatch': setContentType('words'); break;
+            case 'readMatch': setContentType('sentences'); break;
+            case 'pinyinMatch': setContentType('chars'); break;
+            case 'geneMatch': setContentType('words'); break;
+            case 'flashcards': setContentType('chars'); break;
+            default: setContentType('chars');
         }
     }, [isOpen, gameType]);
 
@@ -340,16 +429,13 @@ const GameSettingsModal = ({ isOpen, onClose, onStart, database, userRole, hasCu
                     <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><Settings size={20} className="text-teal-600"/> {getGameTitle()}</h3>
                     <button onClick={onClose}><XCircle size={20} className="text-gray-400"/></button>
                 </div>
-
                 <div className="space-y-4">
-                    {/* 选择游戏内容 */}
                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
                         <label className="text-xs font-bold text-gray-500 mb-2 block">测试内容</label>
                         <select 
                             className="w-full p-2 bg-white border border-slate-200 rounded-lg outline-none text-sm font-medium disabled:bg-gray-100 disabled:text-gray-400"
                             value={contentType}
                             onChange={e => setContentType(e.target.value)}
-                            // [修改] 重新锁定 pinyinMatch，同时保持其他游戏逻辑
                             disabled={['splitMatch', 'readMatch', 'pinyinMatch'].includes(gameType)}
                         >
                              <option value="chars">生字 (Characters)</option>
@@ -362,7 +448,6 @@ const GameSettingsModal = ({ isOpen, onClose, onStart, database, userRole, hasCu
                             {gameType === 'pinyinMatch' && "此游戏测试单字拼音"}
                         </div>
                     </div>
-
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="text-xs font-bold text-gray-500 mb-1 block">数量</label>
@@ -383,7 +468,6 @@ const GameSettingsModal = ({ isOpen, onClose, onStart, database, userRole, hasCu
                             <option value="all">全部</option>{lessons.map(l => <option key={l} value={l}>第 {l} 课</option>)}
                         </select>
                     </div>
-
                     {hasCustomWords && (
                         <div className="pt-2 border-t border-slate-100">
                             <label className="flex items-center gap-3 p-3 rounded-xl border border-teal-100 bg-teal-50 cursor-pointer hover:bg-teal-100 transition">
@@ -392,7 +476,6 @@ const GameSettingsModal = ({ isOpen, onClose, onStart, database, userRole, hasCu
                             </label>
                         </div>
                     )}
-
                     <button onClick={() => onStart(gameType, { count, filterVol, filterLesson, includeCustom, contentType })} className="w-full py-3 bg-teal-600 text-white rounded-xl font-bold shadow-lg shadow-teal-200 hover:bg-teal-700 active:scale-95 transition-all mt-4">开始游戏</button>
                 </div>
             </div>
@@ -485,8 +568,18 @@ const AdminCharacterForm = ({ isOpen, onClose, onSave, database, initialData, la
 };
 
 // ==========================================
-// 4. 游戏组件 (Game Components)
+// 模块 5: 游戏组件 (Game Components)
 // ==========================================
+
+// Helper for Games
+const GameHeader = ({ title, current, total, onExit }) => (
+    <div className="flex justify-between items-center mb-4 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
+        <button onClick={onExit} className="text-gray-500 hover:text-gray-800 flex items-center gap-1 font-bold px-2">
+            <ChevronRight className="rotate-180"/> 退出
+        </button>
+        <div className="font-bold text-lg text-slate-700">{title} <span className="text-sm bg-slate-100 px-2 py-1 rounded-full ml-2 text-slate-500">{current}/{total}</span></div>
+    </div>
+);
 
 const GameOverModal = ({ score, total, gameType, onRestart, onExit, db }) => {
     const [playerName, setPlayerName] = useState("");
@@ -506,9 +599,7 @@ const GameOverModal = ({ score, total, gameType, onRestart, onExit, db }) => {
                     .sort((a,b) => b.score - a.score)
                     .slice(0, 10);
                 setRankings(data);
-            } catch (e) {
-                console.error("Rankings fetch error", e);
-            }
+            } catch (e) { console.error("Rankings fetch error", e); }
         };
         fetchRankings();
     }, [db, gameType, submitted]);
@@ -517,50 +608,25 @@ const GameOverModal = ({ score, total, gameType, onRestart, onExit, db }) => {
         if (!playerName.trim() || !db) return;
         setIsSubmitting(true);
         try {
-            const colRef = getLeaderboardCollection(db);
-            await addDoc(colRef, {
-                name: playerName,
-                score: score,
-                total: total,
-                gameType: gameType,
-                date: new Date().toISOString()
+            await addDoc(getLeaderboardCollection(db), {
+                name: playerName, score, total, gameType, date: new Date().toISOString()
             });
             setSubmitted(true);
-        } catch (e) {
-            console.error("Score submit failed", e);
-            alert("分数提交失败");
-        } finally {
-            setIsSubmitting(false);
-        }
+        } catch (e) { alert("分数提交失败"); } finally { setIsSubmitting(false); }
     };
 
     return (
         <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 text-center animate-in zoom-in duration-300">
-                <div className="flex justify-center mb-4">
-                    <Trophy size={64} className="text-yellow-500 drop-shadow-lg" />
-                </div>
+                <div className="flex justify-center mb-4"><Trophy size={64} className="text-yellow-500 drop-shadow-lg" /></div>
                 <h2 className="text-3xl font-bold text-slate-800 mb-2">挑战结束!</h2>
                 <div className="text-5xl font-black text-teal-600 mb-2">{score} <span className="text-xl text-gray-400 font-normal">分</span></div>
-                
                 {!submitted ? (
                     <div className="mt-6 bg-slate-50 p-6 rounded-2xl border border-slate-100">
                         <p className="text-sm text-gray-500 mb-3">输入名字，上榜单！</p>
                         <div className="flex gap-2">
-                            <input 
-                                className="flex-1 p-3 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-teal-500"
-                                placeholder="你的名字..."
-                                value={playerName}
-                                onChange={e => setPlayerName(e.target.value)}
-                                maxLength={10}
-                            />
-                            <button 
-                                onClick={handleSubmitScore}
-                                disabled={isSubmitting || !playerName}
-                                className="px-4 py-2 bg-teal-600 text-white rounded-xl font-bold disabled:opacity-50"
-                            >
-                                {isSubmitting ? <Loader2 className="animate-spin"/> : "保存"}
-                            </button>
+                            <input className="flex-1 p-3 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-teal-500" placeholder="你的名字..." value={playerName} onChange={e => setPlayerName(e.target.value)} maxLength={10} />
+                            <button onClick={handleSubmitScore} disabled={isSubmitting || !playerName} className="px-4 py-2 bg-teal-600 text-white rounded-xl font-bold disabled:opacity-50">{isSubmitting ? <Loader2 className="animate-spin"/> : "保存"}</button>
                         </div>
                     </div>
                 ) : (
@@ -569,20 +635,13 @@ const GameOverModal = ({ score, total, gameType, onRestart, onExit, db }) => {
                         <div className="bg-slate-50 rounded-xl overflow-hidden border border-slate-100 max-h-48 overflow-y-auto">
                             {rankings.map((r, idx) => (
                                 <div key={idx} className={`flex justify-between items-center p-3 border-b border-slate-100 last:border-0 ${r.name === playerName && r.score === score ? 'bg-yellow-50' : ''}`}>
-                                    <div className="flex items-center gap-3">
-                                        <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${idx < 3 ? 'bg-amber-100 text-amber-700' : 'bg-gray-200 text-gray-600'}`}>
-                                            {idx + 1}
-                                        </span>
-                                        <span className="font-medium text-slate-700">{r.name}</span>
-                                    </div>
-                                    <span className="font-bold text-teal-600">{r.score}</span>
+                                    <div className="flex items-center gap-3"><span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${idx < 3 ? 'bg-amber-100 text-amber-700' : 'bg-gray-200 text-gray-600'}`}>{idx + 1}</span><span className="font-medium text-slate-700">{r.name}</span></div><span className="font-bold text-teal-600">{r.score}</span>
                                 </div>
                             ))}
                             {rankings.length === 0 && <div className="p-4 text-gray-400 text-sm">虚位以待，等你来战！</div>}
                         </div>
                     </div>
                 )}
-
                 <div className="flex gap-3 mt-8">
                     <button onClick={onExit} className="flex-1 py-3 rounded-xl font-bold text-gray-500 hover:bg-gray-100 transition">退出</button>
                     <button onClick={onRestart} className="flex-1 py-3 rounded-xl font-bold bg-teal-600 text-white hover:bg-teal-700 shadow-lg shadow-teal-200 transition">再玩一次</button>
@@ -592,36 +651,17 @@ const GameOverModal = ({ score, total, gameType, onRestart, onExit, db }) => {
     );
 };
 
-const GameHeader = ({ title, current, total, audioEnabled, toggleAudio, onExit }) => (
-    <div className="flex justify-between items-center mb-4 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
-        <button onClick={onExit} className="text-gray-500 hover:text-gray-800 flex items-center gap-1 font-bold px-2">
-            <ChevronRight className="rotate-180"/> 退出
-        </button>
-        <div className="font-bold text-lg text-slate-700">{title} <span className="text-sm bg-slate-100 px-2 py-1 rounded-full ml-2 text-slate-500">{current}/{total}</span></div>
-    </div>
-);
-
-// [游戏 1] 连词大作战 (Split Word Match) - [修复] 增强词语提取逻辑
 const SplitWordMatchGame = ({ items, onBack }) => {
     const [leftCol, setLeftCol] = useState([]); const [rightCol, setRightCol] = useState([]);
     const [selectedLeft, setSelectedLeft] = useState(null); const [matchedPairs, setMatchedPairs] = useState([]);
     const [score, setScore] = useState(0); const [pairs, setPairs] = useState([]);
 
     useEffect(() => {
-        // [修复] 增加对 items 是否存在的判断，以及 trim() 处理
         if (!items || items.length === 0) return;
-
         const allWords = items.flatMap(i => sanitizeWords(i.words || [])).filter(w => w && w.trim().length >= 2);
         const uniqueWords = [...new Set(allWords)];
-        
-        // 如果提取不到词语，避免报错，直接不生成
-        if (uniqueWords.length === 0) {
-            setPairs([]); return;
-        }
-
-        const gameWords = uniqueWords.sort(() => Math.random() - 0.5).slice(0, 8).map((w, idx) => ({
-            id: idx, full: w, left: w[0], right: w.slice(1)
-        }));
+        if (uniqueWords.length === 0) { setPairs([]); return; }
+        const gameWords = uniqueWords.sort(() => Math.random() - 0.5).slice(0, 8).map((w, idx) => ({ id: idx, full: w, left: w[0], right: w.slice(1) }));
         setPairs(gameWords);
         setLeftCol(gameWords.map(w => ({ id: w.id, val: w.left })).sort(() => Math.random() - 0.5));
         setRightCol(gameWords.map(w => ({ id: w.id, val: w.right })).sort(() => Math.random() - 0.5));
@@ -637,8 +677,6 @@ const SplitWordMatchGame = ({ items, onBack }) => {
     };
 
     if (pairs.length > 0 && matchedPairs.length === pairs.length) return <GameOverModal score={score} total={pairs.length * 10} onRestart={onBack} onExit={onBack} />;
-    
-    // [改进] 提示信息更友好
     if (pairs.length === 0) return <div className="p-8 text-center text-gray-400 flex flex-col items-center justify-center h-full"><Search size={48} className="mb-4 text-gray-200"/> 没有找到足够的双字词语数据 <br/><span className="text-sm text-gray-300 mt-2">请尝试选择其他课程或添加更多含有词语的生字</span></div>;
 
     return (
@@ -652,18 +690,13 @@ const SplitWordMatchGame = ({ items, onBack }) => {
     );
 };
 
-// [游戏 2] 拼音对对碰 (Char vs Pinyin) - [恢复] 仅限单字
 const PinyinMatchGame = ({ items, onBack }) => {
     const [leftCol, setLeftCol] = useState([]); const [rightCol, setRightCol] = useState([]);
     const [selectedLeft, setSelectedLeft] = useState(null); const [matchedIds, setMatchedIds] = useState([]);
     
     useEffect(() => {
-        // [恢复] 只处理单字，不处理词语
         let gameItems = items.map((item, idx) => ({ id: idx, char: item.char, pinyin: item.pinyin }));
-        
-        // 过滤掉没有内容的项目
         gameItems = gameItems.filter(i => i.char && i.char.trim());
-
         setLeftCol(gameItems.sort(() => Math.random() - 0.5));
         setRightCol([...gameItems].sort(() => Math.random() - 0.5));
     }, [items]);
@@ -682,18 +715,12 @@ const PinyinMatchGame = ({ items, onBack }) => {
             <div className="flex-1 flex gap-4 p-4 overflow-y-auto">
                 <div className="flex-1 grid grid-cols-2 gap-3 content-start">
                     {leftCol.map(l => (
-                        <button key={l.id} onClick={() => handleLeft(l)} disabled={matchedIds.includes(l.id)} 
-                            className={`h-24 rounded-xl text-3xl font-serif font-bold border-2 transition-all shadow-sm ${selectedLeft?.id===l.id ? 'bg-pink-500 text-white border-pink-600 scale-105' : 'bg-white border-pink-100 text-slate-700 hover:border-pink-300'} ${matchedIds.includes(l.id) ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-                            {l.char}
-                        </button>
+                        <button key={l.id} onClick={() => handleLeft(l)} disabled={matchedIds.includes(l.id)} className={`h-24 rounded-xl text-3xl font-serif font-bold border-2 transition-all shadow-sm ${selectedLeft?.id===l.id ? 'bg-pink-500 text-white border-pink-600 scale-105' : 'bg-white border-pink-100 text-slate-700 hover:border-pink-300'} ${matchedIds.includes(l.id) ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>{l.char}</button>
                     ))}
                 </div>
                 <div className="flex-1 grid grid-cols-2 gap-3 content-start">
                     {rightCol.map(r => (
-                        <button key={r.id} onClick={() => handleRight(r)} disabled={matchedIds.includes(r.id)} 
-                            className={`h-24 rounded-xl text-2xl font-bold border-2 transition-all shadow-sm bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 ${matchedIds.includes(r.id) ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-                            {r.pinyin}
-                        </button>
+                        <button key={r.id} onClick={() => handleRight(r)} disabled={matchedIds.includes(r.id)} className={`h-24 rounded-xl text-2xl font-bold border-2 transition-all shadow-sm bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 ${matchedIds.includes(r.id) ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>{r.pinyin}</button>
                     ))}
                 </div>
             </div>
@@ -701,8 +728,7 @@ const PinyinMatchGame = ({ items, onBack }) => {
     );
 };
 
-// [游戏 3] 基因匹配 (Original Word Match)
-{/*const GeneMatchGame = ({ items, onBack, contentType }) => {
+const GeneMatchGame = ({ items, onBack, contentType }) => {
     const [words, setWords] = useState([]); const [definitions, setDefinitions] = useState([]);
     const [selectedWord, setSelectedWord] = useState(null); const [matchedIds, setMatchedIds] = useState([]);
     useEffect(() => {
@@ -735,13 +761,12 @@ const PinyinMatchGame = ({ items, onBack }) => {
             </div>
         </div>
     );
-};*/}
+};
 
-// [改进] 朗读挑战 (Read Match) - 集成 Web Speech API
 const ReadMatchGame = ({ items, onBack }) => {
     const [index, setIndex] = useState(0);
     const [isListening, setIsListening] = useState(false); 
-    const [feedback, setFeedback] = useState(null); // null, 'listening', 'correct', 'incorrect'
+    const [feedback, setFeedback] = useState(null); 
     const [recognizedText, setRecognizedText] = useState("");
 
     const sentences = useMemo(() => {
@@ -750,76 +775,36 @@ const ReadMatchGame = ({ items, onBack }) => {
             return sList.map(s => ({ original: s, clean: normalizeText(s), hint: item.char }));
         }).filter(s => s.original.length > 2).slice(0, 10);
     }, [items]);
-    
     const current = sentences[index];
 
-    // 语音识别逻辑
     const startListening = () => {
         if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-            alert("您的浏览器不支持语音识别，将使用模拟模式。请使用 Chrome 浏览器体验完整功能。");
-            simulateListening();
-            return;
+            alert("您的浏览器不支持语音识别，将使用模拟模式。"); simulateListening(); return;
         }
-
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const recognition = new SpeechRecognition();
-        recognition.lang = 'zh-CN';
-        recognition.continuous = false;
-        recognition.interimResults = false;
-
-        setIsListening(true);
-        setFeedback('listening');
-        setRecognizedText("");
-
+        recognition.lang = 'zh-CN'; recognition.continuous = false; recognition.interimResults = false;
+        setIsListening(true); setFeedback('listening'); setRecognizedText("");
         recognition.onresult = (event) => {
             const transcript = event.results[0][0].transcript;
-            setRecognizedText(transcript);
-            checkResult(transcript);
-            setIsListening(false);
+            setRecognizedText(transcript); checkResult(transcript); setIsListening(false);
         };
-
-        recognition.onerror = (event) => {
-            console.error("Speech error", event.error);
-            setIsListening(false);
-            setFeedback('error');
-        };
-
-        recognition.onend = () => {
-            setIsListening(false);
-        };
-
+        recognition.onerror = (event) => { setIsListening(false); setFeedback('error'); };
+        recognition.onend = () => { setIsListening(false); };
         recognition.start();
     };
 
     const simulateListening = () => {
         setIsListening(true); setFeedback('listening');
-        setTimeout(() => {
-            setIsListening(false); 
-            checkResult(current.clean);
-        }, 1500);
+        setTimeout(() => { setIsListening(false); checkResult(current.clean); }, 1500);
     };
 
-    // [改进] 比对逻辑，利用更严格的 normalizeText
     const checkResult = (transcript) => {
-        const spoken = normalizeText(transcript);
-        const target = current.clean;
-        
-        // 只要包含目标内容的核心文字即可（因为已经去除了所有标点和空格）
+        const spoken = normalizeText(transcript); const target = current.clean;
         if (spoken.includes(target) || target.includes(spoken) || spoken === target) {
-            setFeedback('correct'); 
-            speak("太棒了"); 
-            setTimeout(() => { 
-                setRecognizedText("");
-                if (index < sentences.length - 1) { 
-                    setIndex(prev => prev + 1); setFeedback(null); 
-                } else { 
-                    setIndex(prev => prev + 1); 
-                } 
-            }, 1500); 
-        } else { 
-            setFeedback('incorrect'); 
-            speak("再试一次");
-        }
+            setFeedback('correct'); speak("太棒了"); 
+            setTimeout(() => { setRecognizedText(""); if (index < sentences.length - 1) { setIndex(prev => prev + 1); setFeedback(null); } else { setIndex(prev => prev + 1); } }, 1500); 
+        } else { setFeedback('incorrect'); speak("再试一次"); }
     };
 
     if (!current) return <GameOverModal score={100} total={100} onRestart={onBack} onExit={onBack} />;
@@ -827,33 +812,16 @@ const ReadMatchGame = ({ items, onBack }) => {
     return (
         <div className="flex flex-col h-full items-center p-6">
             <GameHeader title="朗读挑战" current={index + 1} total={sentences.length} onExit={onBack} />
-            
             <div className="text-gray-400 font-bold mb-4 text-xl tracking-widest bg-gray-50 px-4 py-1 rounded-full">{current.hint}</div>
-            
             <div className="w-full bg-white p-8 rounded-3xl border-2 border-blue-100 flex flex-col items-center justify-center min-h-[200px] shadow-sm mb-6">
                 <p className="text-2xl font-medium text-slate-800 text-center leading-loose">{current.original}</p>
-                {recognizedText && (
-                    <div className="mt-4 text-sm text-gray-500 bg-gray-50 px-3 py-1 rounded-lg">
-                        识别结果: "{recognizedText}"
-                    </div>
-                )}
+                {recognizedText && (<div className="mt-4 text-sm text-gray-500 bg-gray-50 px-3 py-1 rounded-lg">识别结果: "{recognizedText}"</div>)}
             </div>
-
             <div className="flex flex-col items-center gap-4">
                 {feedback === 'listening' && <div className="text-blue-500 animate-pulse font-bold">正在聆听...</div>}
                 {feedback === 'correct' && <div className="text-green-500 font-bold flex items-center gap-2"><CheckCircle2/> 发音准确</div>}
                 {feedback === 'incorrect' && <div className="text-red-500 font-bold flex items-center gap-2"><XCircle/> 请重读</div>}
-                {feedback === 'error' && <div className="text-gray-400 text-xs">识别失败，请检查麦克风权限</div>}
-
-                <button 
-                    onClick={startListening} 
-                    disabled={isListening || feedback === 'correct'}
-                    className={`w-24 h-24 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 ${
-                        isListening ? 'bg-red-500 scale-110 ring-8 ring-red-100' : 
-                        feedback === 'correct' ? 'bg-green-500 scale-0' : 
-                        'bg-blue-600 hover:bg-blue-700 hover:scale-105'
-                    }`}
-                >
+                <button onClick={startListening} disabled={isListening || feedback === 'correct'} className={`w-24 h-24 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 ${isListening ? 'bg-red-500 scale-110 ring-8 ring-red-100' : feedback === 'correct' ? 'bg-green-500 scale-0' : 'bg-blue-600 hover:bg-blue-700 hover:scale-105'}`}>
                     {isListening ? <Activity className="text-white animate-pulse" size={40}/> : <Mic className="text-white" size={40}/>}
                 </button>
                 <p className="text-gray-400 text-sm mt-2">点击话筒，大声朗读例句</p>
@@ -862,8 +830,7 @@ const ReadMatchGame = ({ items, onBack }) => {
     );
 };
 
-// [恢复] 闪卡记忆 (FlashCard) - 网格 + 弹窗 + 老师评分 + 手动发音
-const FlashCardGame = ({ items, onBack, db, contentType }) => { // 接收 contentType
+const FlashCardGame = ({ items, onBack, db, contentType }) => {
     const [score, setScore] = useState(0);
     const [audioEnabled, setAudioEnabled] = useState(false); 
     const [cards, setCards] = useState([]);
@@ -875,114 +842,65 @@ const FlashCardGame = ({ items, onBack, db, contentType }) => { // 接收 conten
 
     useEffect(() => {
         let allCardsData = [];
-        
-        // [修复] 根据 contentType 生成卡片
+        // Support sentences/words/chars
         if (contentType === 'sentences') {
-            // 例句模式
             items.forEach(item => {
                 const sList = sanitizeWords(item.sentences);
                 if (sList.length > 0) {
                     sList.forEach(s => {
-                        allCardsData.push({
-                            text: s,
-                            pinyin: '', 
-                            sentence: '', // 正面就是例句，所以不需要额外例句字段
-                            definition: `${item.char} (${item.pinyin}) - ${item.definition || '暂无释义'}` // 背面显示生字信息
-                        });
+                        allCardsData.push({ text: s, pinyin: '', sentence: '', definition: `${item.char} (${item.pinyin}) - ${item.definition || '暂无释义'}` });
                     });
                 }
             });
         } else if (contentType === 'words') {
-            // 词语模式
             items.forEach(item => {
                 const wList = sanitizeWords(item.words);
                 const sList = sanitizeWords(item.sentences);
                 if (wList.length > 0) {
                     wList.forEach((word, idx) => {
-                        allCardsData.push({ 
-                            text: word, 
-                            pinyin: item.pinyin || '',
-                            sentence: sList[idx] || '', 
-                            definition: item.definition 
-                        });
+                        allCardsData.push({ text: word, pinyin: item.pinyin || '', sentence: sList[idx] || '', definition: item.definition });
                     });
                 }
             });
         } else {
-            // 生字模式 (默认)
             items.forEach(item => {
                 const sList = sanitizeWords(item.sentences);
                 if (item.char) {
-                    allCardsData.push({ 
-                        text: item.char, 
-                        pinyin: item.pinyin,
-                        sentence: sList[0] || '', 
-                        definition: item.definition
-                    });
+                    allCardsData.push({ text: item.char, pinyin: item.pinyin, sentence: sList[0] || '', definition: item.definition });
                 }
             });
         }
 
-        // 去重逻辑 (针对 text)
         const uniqueMap = new Map();
         allCardsData.forEach(w => uniqueMap.set(w.text, w));
         const uniqueCards = Array.from(uniqueMap.values());
-
         const gameCards = uniqueCards.sort(() => Math.random() - 0.5).slice(0, 20).map((w,i) => ({
-            id: i, 
-            content: w.text, 
-            pinyin: w.pinyin,
-            sentence: w.sentence, 
-            definition: w.definition,
-            status: 'hidden'
+            id: i, content: w.text, pinyin: w.pinyin, sentence: w.sentence, definition: w.definition, status: 'hidden'
         }));
         setCards(gameCards);
     }, [items, contentType]);
 
-    const handleFlip = (card) => {
-        speak(card.content, audioEnabled);
-        setFlippedCard(card); // Open Modal
-        setShowPinyin(false); 
-    };
-
+    const handleFlip = (card) => { speak(card.content, audioEnabled); setFlippedCard(card); setShowPinyin(false); };
     const handleGrade = (isCorrect) => {
         if (!flippedCard) return;
         const cardId = flippedCard.id;
-        
         setCards(prev => prev.filter(c => c.id !== cardId));
-        setFlippedCard(null); // Close Modal
-
-        if (isCorrect) {
-            setScore(s => s + 1);
-            setCollected(prev => [...prev, flippedCard]);
-        } else {
-            setMistakes(prev => [...prev, { ...flippedCard, status: 'hidden' }]); 
-        }
+        setFlippedCard(null); 
+        if (isCorrect) { setScore(s => s + 1); setCollected(prev => [...prev, flippedCard]); } 
+        else { setMistakes(prev => [...prev, { ...flippedCard, status: 'hidden' }]); }
     };
-
-    const handleRetryMistakes = () => {
-        setCards(mistakes.sort(() => Math.random() - 0.5));
-        setMistakes([]);
-    };
-
-    const getTitle = () => {
-        if (contentType === 'sentences') return "例句闪卡";
-        if (contentType === 'words') return "词语闪卡";
-        return "生字闪卡";
-    };
+    const handleRetryMistakes = () => { setCards(mistakes.sort(() => Math.random() - 0.5)); setMistakes([]); };
+    const getTitle = () => { if (contentType === 'sentences') return "例句闪卡"; if (contentType === 'words') return "词语闪卡"; return "生字闪卡"; };
 
     return (
         <div className="flex h-full gap-4">
             <div className="w-48 flex flex-col gap-4">
                 <div className="bg-red-50 rounded-2xl border border-red-100 p-4 h-full flex flex-col">
                     <h3 className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2 flex items-center gap-2"><XCircle size={14}/> 纠错本</h3>
-                    <div className="flex-1 overflow-y-auto space-y-2">
-                        {mistakes.map((m, idx) => <div key={idx} className="bg-white p-2 rounded text-sm text-slate-600 shadow-sm border-l-4 border-red-300">{m.content}</div>)}
-                    </div>
+                    <div className="flex-1 overflow-y-auto space-y-2">{mistakes.map((m, idx) => <div key={idx} className="bg-white p-2 rounded text-sm text-slate-600 shadow-sm border-l-4 border-red-300">{m.content}</div>)}</div>
                     {mistakes.length > 0 && cards.length === 0 && <button onClick={handleRetryMistakes} className="mt-3 w-full py-2 bg-red-500 text-white rounded-xl text-sm font-bold shadow-md animate-bounce"><RefreshCw size={14} className="inline mr-1"/> 重练错题</button>}
                 </div>
             </div>
-
             <div className="flex-1 flex flex-col">
                 <GameHeader title={getTitle()} current={collected.length} total={collected.length + cards.length + mistakes.length} audioEnabled={audioEnabled} toggleAudio={() => setAudioEnabled(!audioEnabled)} onExit={onBack} />
                 <div className="flex-1 bg-slate-50/50 rounded-3xl border border-slate-200 p-4 overflow-y-auto relative">
@@ -997,71 +915,35 @@ const FlashCardGame = ({ items, onBack, db, contentType }) => { // 接收 conten
                     ) : <div className="h-full flex flex-col items-center justify-center text-gray-400"><Star size={48} className="text-yellow-400 mb-4"/><p>练习完成！</p><button onClick={() => setGameOver(true)} className="mt-6 px-8 py-3 bg-teal-600 text-white rounded-full font-bold shadow-lg">查看成绩</button></div>}
                 </div>
             </div>
-
             <div className="w-48 flex flex-col gap-4">
                 <div className="bg-green-50 rounded-2xl border border-green-100 p-4 h-full flex flex-col">
                     <h3 className="text-xs font-bold text-green-600 uppercase tracking-wider mb-2 flex items-center gap-2"><Save size={14}/> 收集箱 ({score})</h3>
-                    <div className="flex-1 overflow-y-auto space-y-2">
-                        {collected.map((c, idx) => <div key={idx} className="bg-white p-2 rounded text-sm text-green-700 shadow-sm border-l-4 border-green-400 animate-in slide-in-from-left">{c.content}</div>)}
-                    </div>
+                    <div className="flex-1 overflow-y-auto space-y-2">{collected.map((c, idx) => <div key={idx} className="bg-white p-2 rounded text-sm text-green-700 shadow-sm border-l-4 border-green-400 animate-in slide-in-from-left">{c.content}</div>)}</div>
                 </div>
             </div>
-
-            {/* BIG CARD MODAL */}
             {flippedCard && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 animate-in fade-in duration-200 backdrop-blur-sm">
                     <div className="bg-white w-full max-w-5xl aspect-[4/3] rounded-[2rem] shadow-2xl flex flex-col items-center justify-center p-8 relative animate-in zoom-in-95 duration-300 border-8 border-teal-100">
-                        {/* Audio Button - Manual Trigger */}
-                        <button onClick={() => speak(flippedCard.content)} className="absolute top-8 left-8 p-3 bg-teal-50 text-teal-600 rounded-full hover:bg-teal-100 transition shadow-sm z-50">
-                            <Volume2 size={24}/>
-                        </button>
-
+                        <button onClick={() => speak(flippedCard.content)} className="absolute top-8 left-8 p-3 bg-teal-50 text-teal-600 rounded-full hover:bg-teal-100 transition shadow-sm z-50"><Volume2 size={24}/></button>
                         <div className="absolute top-8 right-8">
                             <button onClick={() => setShowPinyin(!showPinyin)} className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200 transition">
-                                {showPinyin ? <EyeOff size={20}/> : <Eye size={20}/>}
-                                {showPinyin ? "隐藏拼音" : "查看拼音"}
+                                {showPinyin ? <EyeOff size={20}/> : <Eye size={20}/>}{showPinyin ? "隐藏拼音" : "查看拼音"}
                             </button>
                         </div>
-
                         <div className="flex-1 flex flex-col items-center justify-center w-full">
                             {showPinyin && <div className="text-5xl font-bold text-gray-400 mb-4">{flippedCard.pinyin}</div>}
-                            <div 
-                                className={`font-bold text-slate-800 leading-tight text-center break-words ${contentType === 'sentences' ? 'text-6xl px-12' : 'text-[10rem]'}`}
-                                style={{ fontFamily: '"KaiTi", "STKaiti", "SimKai", serif', lineHeight: '1.1' }}
-                            >
-                                {flippedCard.content}
-                            </div>
-                            
-                            {/* 如果是生字或词语模式，显示例句 */}
-                            {contentType !== 'sentences' && flippedCard.sentence && (
-                                <div className="mt-6 text-xl text-slate-500 max-w-2xl text-center bg-slate-50 px-6 py-3 rounded-xl border border-slate-100">
-                                    <span className="font-bold mr-2 text-slate-400">例句:</span>
-                                    {flippedCard.sentence}
-                                </div>
-                            )}
-
-                            {/* 如果是例句模式，显示来源释义 */}
-                            {contentType === 'sentences' && flippedCard.definition && (
-                                <div className="mt-6 text-xl text-slate-500 max-w-2xl text-center bg-slate-50 px-6 py-3 rounded-xl border border-slate-100">
-                                    <span className="font-bold mr-2 text-slate-400">来源:</span>
-                                    {flippedCard.definition}
-                                </div>
-                            )}
+                            <div className={`font-bold text-slate-800 leading-tight text-center break-words ${contentType === 'sentences' ? 'text-6xl px-12' : 'text-[10rem]'}`} style={{ fontFamily: '"KaiTi", "STKaiti", "SimKai", serif', lineHeight: '1.1' }}>{flippedCard.content}</div>
+                            {contentType !== 'sentences' && flippedCard.sentence && (<div className="mt-6 text-xl text-slate-500 max-w-2xl text-center bg-slate-50 px-6 py-3 rounded-xl border border-slate-100"><span className="font-bold mr-2 text-slate-400">例句:</span>{flippedCard.sentence}</div>)}
+                            {contentType === 'sentences' && flippedCard.definition && (<div className="mt-6 text-xl text-slate-500 max-w-2xl text-center bg-slate-50 px-6 py-3 rounded-xl border border-slate-100"><span className="font-bold mr-2 text-slate-400">来源:</span>{flippedCard.definition}</div>)}
                         </div>
-
                         <div className="flex gap-12 mb-8 mt-4">
-                            <button onClick={() => handleGrade(true)} className="p-3 bg-green-100 text-green-600 rounded-full hover:bg-green-500 hover:text-white transition transform hover:scale-110 shadow-lg">
-                                <CheckCircle2 size={40}/>
-                            </button>
-                            <button onClick={() => handleGrade(false)} className="p-3 bg-red-100 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition transform hover:scale-110 shadow-lg">
-                                <XCircle size={40}/>
-                            </button>
+                            <button onClick={() => handleGrade(true)} className="p-3 bg-green-100 text-green-600 rounded-full hover:bg-green-500 hover:text-white transition transform hover:scale-110 shadow-lg"><CheckCircle2 size={40}/></button>
+                            <button onClick={() => handleGrade(false)} className="p-3 bg-red-100 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition transform hover:scale-110 shadow-lg"><XCircle size={40}/></button>
                         </div>
                         <p className="absolute bottom-6 text-gray-400 text-sm">请朗读内容，老师评分</p>
                     </div>
                 </div>
             )}
-
             {gameOver && <GameOverModal score={score} total={collected.length + mistakes.length} gameType="flashcards" onRestart={() => window.location.reload()} onExit={onBack} db={db} />}
         </div>
     );
@@ -1072,59 +954,53 @@ const GameSelector = ({ onOpenSettings }) => (
         <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2"><Gamepad2 className="text-purple-500"/> 游戏练习中心</h2>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             <button onClick={() => onOpenSettings('splitMatch')} className="group p-6 bg-indigo-50 hover:bg-indigo-100 rounded-2xl border-2 border-indigo-100 hover:border-indigo-300 transition text-left h-full">
-                <div className="text-3xl mb-3">🧩</div>
-                <div className="font-bold text-indigo-800 text-lg">连词大作战</div>
-                <div className="text-xs text-indigo-500 mt-1">词语拆分与组合</div>
+                <div className="text-3xl mb-3">🧩</div><div className="font-bold text-indigo-800 text-lg">连词大作战</div><div className="text-xs text-indigo-500 mt-1">词语拆分与组合</div>
             </button>
             <button onClick={() => onOpenSettings('pinyinMatch')} className="group p-6 bg-pink-50 hover:bg-pink-100 rounded-2xl border-2 border-pink-100 hover:border-pink-300 transition text-left h-full">
-                <div className="text-3xl mb-3">🅰️</div>
-                <div className="font-bold text-pink-800 text-lg">拼音对对碰</div>
-                <div className="text-xs text-pink-500 mt-1">汉字 vs 拼音</div>
+                <div className="text-3xl mb-3">🅰️</div><div className="font-bold text-pink-800 text-lg">拼音对对碰</div><div className="text-xs text-pink-500 mt-1">汉字 vs 拼音</div>
             </button>
             <button onClick={() => onOpenSettings('readMatch')} className="group p-6 bg-blue-50 hover:bg-blue-100 rounded-2xl border-2 border-blue-100 hover:border-blue-300 transition text-left h-full">
-                <div className="text-3xl mb-3">🎤</div>
-                <div className="font-bold text-blue-800 text-lg">朗读挑战</div>
-                <div className="text-xs text-blue-500 mt-1">朗读例句 (语音识别)</div>
+                <div className="text-3xl mb-3">🎤</div><div className="font-bold text-blue-800 text-lg">朗读挑战</div><div className="text-xs text-blue-500 mt-1">朗读例句 (语音识别)</div>
             </button>
             {/* <button onClick={() => onOpenSettings('geneMatch')} className="group p-6 bg-teal-50 hover:bg-teal-100 rounded-2xl border-2 border-teal-100 hover:border-teal-300 transition text-left h-full">
-                <div className="text-3xl mb-3">🧬</div>
-                <div className="font-bold text-teal-800 text-lg">基因匹配</div>
-                <div className="text-xs text-teal-500 mt-1">词/字 vs 释义</div>
-            </button> */}
+                <div className="text-3xl mb-3">🧬</div><div className="font-bold text-teal-800 text-lg">基因匹配</div><div className="text-xs text-teal-500 mt-1">词/字 vs 释义</div>
+            </button>*/}
             <button onClick={() => onOpenSettings('flashcards')} className="group p-6 bg-amber-50 hover:bg-amber-100 rounded-2xl border-2 border-amber-100 hover:border-amber-300 transition text-left h-full">
-                <div className="text-3xl mb-3">📇</div>
-                <div className="font-bold text-amber-800 text-lg">闪卡记忆</div>
-                <div className="text-xs text-amber-500 mt-1">手动发音，积分排行</div>
+                <div className="text-3xl mb-3">📇</div><div className="font-bold text-amber-800 text-lg">闪卡记忆</div><div className="text-xs text-amber-500 mt-1">手动发音，积分排行</div>
             </button>
         </div>
     </div>
 );
 
 // ==========================================
-// 主应用 (Main)
+// 模块 6: 主程序 (Main App - Logic & View Composition)
 // ==========================================
 export default function HanziLearningApp() {
-  const [database, setDatabase] = useState([]); 
-  const [customWords, setCustomWords] = useState([]); 
+  const firebaseApp = useRef(null);
+  
+  // Initialize Firebase First
+  if (!firebaseApp.current) {
+      try {
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : YOUR_FIREBASE_CONFIG;
+        if (firebaseConfig.apiKey) firebaseApp.current = initializeApp(firebaseConfig);
+      } catch (e) { console.error("FB Init", e); }
+  }
+
+  // --- 1. 使用 Hooks 获取数据和逻辑 ---
+  const { user, isAdmin, isManualAdmin, isProcessing: isAuthProcessing, isAuthModalOpen, setIsAuthModalOpen, login, logout } = useAuth(firebaseApp.current);
+  const { database, customWords, dbInstance, saveChar, addCustomWord, deleteCustomWord, batchImport } = useHanziData(firebaseApp.current, user);
+
+  // --- 2. 本地 UI 状态 ---
+  const [appMode, setAppMode] = useState('learn'); // 'learn' or 'games'
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedChar, setSelectedChar] = useState(null);
   const [showList, setShowList] = useState(false);
   
-  // Game State
-  const [appMode, setAppMode] = useState('learn'); 
   const [gameConfig, setGameConfig] = useState(null); 
   const [isGameSettingsOpen, setIsGameSettingsOpen] = useState(false);
   const [pendingGameType, setPendingGameType] = useState(null);
 
-  // Auth State
-  const [user, setUser] = useState(null);
-  const [isFirebaseAdmin, setIsFirebaseAdmin] = useState(false);
-  const [isManualAdmin, setIsManualAdmin] = useState(false);
-  const isAdmin = isFirebaseAdmin || isManualAdmin; 
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [isProcessingAuth, setIsProcessingAuth] = useState(false);
-
-  // Modals
+  // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [isCustomAdding, setIsCustomAdding] = useState(false);
@@ -1132,141 +1008,35 @@ export default function HanziLearningApp() {
   const [editingChar, setEditingChar] = useState(null);
   const [lastMeta, setLastMeta] = useState({ volume: '', lesson: '' });
 
-  const firebaseApp = useRef(null);
-  const auth = useRef(null);
-  const db = useRef(null);
-
-  // 1. Init Firebase
+  // Update selected char when DB loads
   useEffect(() => {
-    try {
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : YOUR_FIREBASE_CONFIG;
-        if (!firebaseConfig.apiKey) return;
-        firebaseApp.current = initializeApp(firebaseConfig);
-        auth.current = getAuth(firebaseApp.current);
-        db.current = getFirestore(firebaseApp.current);
-        
-        const initAuth = async () => {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                await signInWithCustomToken(auth.current, __initial_auth_token);
-            } else {
-                await signInAnonymously(auth.current);
-            }
-        };
-        initAuth();
+      if (!selectedChar && database.length > 0) setSelectedChar(database[0]);
+  }, [database]);
 
-        onAuthStateChanged(auth.current, (currentUser) => {
-            setUser(currentUser);
-            if (currentUser && currentUser.email && ADMIN_EMAILS.includes(currentUser.email)) {
-                setIsFirebaseAdmin(true);
-            } else {
-                setIsFirebaseAdmin(false);
-            }
-        });
-    } catch (err) { console.error("Firebase init failed:", err); }
-  }, []);
-
-  // 2. Listen Data
-  useEffect(() => {
-    if (!db.current || !user) return;
-    const unsubscribe = onSnapshot(getHanziCollection(db.current), (snapshot) => {
-        const cloudData = [];
-        snapshot.forEach(doc => cloudData.push({ ...doc.data(), id: doc.id }));
-        cloudData.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
-        setDatabase(cloudData);
-        if (!selectedChar && cloudData.length > 0) setSelectedChar(cloudData[0]);
-    });
-    return () => unsubscribe();
-  }, [user]);
-
-  // Custom words logic
-  useEffect(() => {
-    if (!db.current || !user) { setCustomWords([]); return; }
-     if (!user.isAnonymous) {
-        const unsubscribe = onSnapshot(getUserCustomCollection(db.current, user.uid), (snapshot) => {
-            const myWords = []; snapshot.forEach(doc => myWords.push({ ...doc.data(), id: doc.id }));
-            setCustomWords(myWords);
-        }, (error) => console.log("Private DB access denied or skipped"));
-        return () => unsubscribe();
-     }
-  }, [user]);
-
-  // Actions
-  const handleLogin = async () => {
-      if (!auth.current) { setIsManualAdmin(true); setIsAuthModalOpen(false); return; }
-      setIsProcessingAuth(true);
-      try { await signInWithPopup(auth.current, new GoogleAuthProvider()); } 
-      catch (error) { if(confirm("登录受阻。开启演示模式？")) setIsManualAdmin(true); }
-      setIsProcessingAuth(false);
-      setIsAuthModalOpen(false);
-  };
-  const handleLogout = async () => { 
-      if (auth.current) { await signOut(auth.current); await signInAnonymously(auth.current); } 
-      setIsFirebaseAdmin(false); setIsManualAdmin(false); 
-  };
-  const handleSaveToCloud = async (charData) => {
-    if (!db.current) return;
-    const docRef = doc(getHanziCollection(db.current), charData.char);
-    const saveData = { ...charData, updatedAt: new Date().toISOString(), updatedBy: user?.email || 'admin' };
-    delete saveData.id; await setDoc(docRef, saveData);
-    setLastMeta({ volume: charData.volume, lesson: charData.lesson });
-  };
-  const handleBatchImport = async (dataArray) => {
-      if (!db.current) return;
-      const batch = writeBatch(db.current);
-      const collRef = getHanziCollection(db.current);
-      let count = 0;
-      dataArray.forEach(item => {
-          if (!item.char) return;
-          const saveData = { ...item, updatedAt: new Date().toISOString() };
-          batch.set(doc(collRef, item.char), saveData);
-          count++;
-      });
-      await batch.commit();
-      alert(`Success: ${count}`);
-  };
-  const handleExport = async () => {
-      if (!db.current) return;
-      const snapshot = await getDocs(getHanziCollection(db.current));
-      const exportData = snapshot.docs.map(doc => { const d = doc.data(); delete d.updatedAt; delete d.updatedBy; return d; });
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = `hanzi_backup.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  };
-  const handleAddCustomWord = async (wordData) => {
-      if (!db.current || !user) return;
-      setIsCustomAdding(true);
-      try { await addDoc(getUserCustomCollection(db.current, user.uid), { ...wordData, createdAt: new Date().toISOString() }); } catch(e) { alert("Save failed"); } finally { setIsCustomAdding(false); }
-  };
-  const handleDeleteCustomWord = async (id) => { if (!db.current || !user) return; await deleteDoc(doc(getUserCustomCollection(db.current, user.uid), id)); };
-
-  // Game Handlers
-  const handleOpenGameSettings = (type) => {
-      setPendingGameType(type);
-      setIsGameSettingsOpen(true);
-  };
-
+  // Handlers
+  const handleOpenGameSettings = (type) => { setPendingGameType(type); setIsGameSettingsOpen(true); };
   const handleStartGame = (type, settings) => {
       const { count, filterVol, filterLesson, includeCustom, contentType } = settings;
       let items = [...database];
       if (filterVol !== 'all') items = items.filter(i => i.volume === filterVol);
       if (filterLesson !== 'all') items = items.filter(i => i.lesson === filterLesson);
       items = items.sort(() => Math.random() - 0.5).slice(0, count);
-
       if (includeCustom && customWords.length > 0) {
            const formattedCustom = customWords.map(w => ({ char: w.char, pinyin: w.pinyin, words: [w.char], sentences: [w.sentence], definition: w.definition, isCustom: true }));
            items = [...formattedCustom, ...items];
       }
       if (items.length === 0) { alert("没有找到内容"); return; }
-      
-      setGameConfig({ type, items, contentType });
-      setIsGameSettingsOpen(false);
+      setGameConfig({ type, items, contentType }); setIsGameSettingsOpen(false);
   };
+
+  const handleCustomAddWrapper = async (data) => { setIsCustomAdding(true); await addCustomWord(data); setIsCustomAdding(false); };
 
   const filteredData = useMemo(() => {
     if (!searchTerm) return [];
     return database.filter(item => item.char.includes(searchTerm) || item.pinyin.toLowerCase().includes(searchTerm.toLowerCase()));
   }, [searchTerm, database]);
 
+  // --- 3. 渲染视图 ---
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans text-slate-800 pb-20">
       <header className="bg-teal-700 text-white p-4 sticky top-0 z-50 shadow-xl backdrop-blur-md bg-opacity-95">
@@ -1288,7 +1058,7 @@ export default function HanziLearningApp() {
                      <button onClick={handleExport} className="p-2 bg-teal-600 rounded-lg hover:bg-teal-500" title="导出"><Download size={16} /></button>
                      <button onClick={() => setIsImportModalOpen(true)} className="p-2 bg-indigo-500 rounded-lg hover:bg-indigo-600" title="导入"><UploadCloud size={16} /></button>
                      <button onClick={() => { setEditingChar(null); setIsModalOpen(true); }} className="flex items-center gap-1 bg-white text-teal-700 px-3 py-1.5 rounded-lg font-bold shadow hover:bg-teal-50 text-sm"><PlusCircle size={16} /> 录入</button>
-                     <button onClick={handleLogout} className="text-teal-200 hover:text-white p-1"><LogOut size={20}/></button>
+                     <button onClick={logout} className="text-teal-200 hover:text-white p-1"><LogOut size={20}/></button>
                  </div>
              ) : (
                  <div className="flex gap-2">
@@ -1308,11 +1078,12 @@ export default function HanziLearningApp() {
                     {gameConfig.type === 'pinyinMatch' && <PinyinMatchGame items={gameConfig.items} onBack={() => setGameConfig(null)} contentType={gameConfig.contentType} />}
                     {gameConfig.type === 'readMatch' && <ReadMatchGame items={gameConfig.items} onBack={() => setGameConfig(null)} />}
                     {gameConfig.type === 'geneMatch' && <GeneMatchGame items={gameConfig.items} onBack={() => setGameConfig(null)} contentType={gameConfig.contentType} />}
-                    {gameConfig.type === 'flashcards' && <FlashCardGame items={gameConfig.items} onBack={() => setGameConfig(null)} db={db.current} contentType={gameConfig.contentType} />}
+                    {gameConfig.type === 'flashcards' && <FlashCardGame items={gameConfig.items} onBack={() => setGameConfig(null)} db={dbInstance} contentType={gameConfig.contentType} />}
                 </div>
             ) : <GameSelector onOpenSettings={handleOpenGameSettings} />
         ) : (
             <>
+                {/* 搜索栏 */}
                 <div className="relative group z-40">
                     <input type="text" placeholder="🔍 搜索生字..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onFocus={() => setShowList(true)} className="w-full pl-12 pr-4 py-4 rounded-2xl border-2 border-slate-200 focus:border-teal-500 focus:ring-4 focus:ring-teal-100 transition shadow-sm text-lg outline-none" />
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -1327,6 +1098,8 @@ export default function HanziLearningApp() {
                         </div>
                     )}
                 </div>
+
+                {/* 学习卡片主视图 */}
                 {selectedChar ? (
                     <div className="grid lg:grid-cols-12 gap-6 animate-in slide-in-from-bottom-4 duration-500">
                         <div className="lg:col-span-5">
@@ -1354,7 +1127,6 @@ export default function HanziLearningApp() {
                                 </div>
                             </div>
                             
-                            {/* [改进] 通栏卡片式布局：上词下句 */}
                             <div className="bg-white rounded-3xl shadow-sm border border-slate-200 flex-1 overflow-hidden">
                                 <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
                                     <h3 className="font-bold text-slate-700 flex items-center gap-2">
@@ -1367,43 +1139,22 @@ export default function HanziLearningApp() {
                                             const sentence = selectedChar.sentences && selectedChar.sentences[i] ? selectedChar.sentences[i] : "暂无例句";
                                             return (
                                                 <div key={i} className="group border border-slate-200 rounded-2xl overflow-hidden hover:shadow-lg hover:border-teal-200 transition-all duration-300 bg-white">
-                                                    {/* 上部分：词语 */}
-                                                    <div 
-                                                        className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center cursor-pointer group-hover:bg-teal-50/50 transition-colors" 
-                                                        onClick={() => speak(w)}
-                                                    >
+                                                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center cursor-pointer group-hover:bg-teal-50/50 transition-colors" onClick={() => speak(w)}>
                                                         <div className="flex items-center gap-3">
                                                             <span className="bg-teal-600 text-white text-xs font-bold px-2 py-0.5 rounded">词语</span>
                                                             <span className="text-xl font-bold text-slate-800 tracking-wide">{w}</span>
                                                         </div>
-                                                        <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-teal-500 hover:bg-teal-500 hover:text-white transition shadow-sm">
-                                                            <Volume2 size={16} />
-                                                        </div>
+                                                        <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-teal-500 hover:bg-teal-500 hover:text-white transition shadow-sm"><Volume2 size={16} /></div>
                                                     </div>
-                                                    {/* 下部分：例句 */}
-                                                    <div 
-                                                        className="p-5 cursor-pointer relative" 
-                                                        onClick={() => speak(sentence)}
-                                                    >
-                                                        <div className="absolute top-5 left-5 text-gray-300 select-none">
-                                                            <span className="text-4xl leading-none">“</span>
-                                                        </div>
-                                                        <p className="text-slate-600 leading-relaxed text-base pl-8 pr-2 pt-1 font-medium">
-                                                            {sentence}
-                                                        </p>
-                                                        <div className="mt-2 pl-8 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <span className="text-xs text-teal-500 font-bold flex items-center gap-1"><Volume2 size={12}/> 点击朗读例句</span>
-                                                        </div>
+                                                    <div className="p-5 cursor-pointer relative" onClick={() => speak(sentence)}>
+                                                        <div className="absolute top-5 left-5 text-gray-300 select-none"><span className="text-4xl leading-none">“</span></div>
+                                                        <p className="text-slate-600 leading-relaxed text-base pl-8 pr-2 pt-1 font-medium">{sentence}</p>
+                                                        <div className="mt-2 pl-8 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity"><span className="text-xs text-teal-500 font-bold flex items-center gap-1"><Volume2 size={12}/> 点击朗读例句</span></div>
                                                     </div>
                                                 </div>
                                             )
                                         })
-                                    ) : ( 
-                                        <div className="text-center text-gray-400 py-12 flex flex-col items-center gap-2">
-                                            <BookOpen size={32} className="opacity-20"/>
-                                            <span>暂无扩展内容</span>
-                                        </div> 
-                                    )}
+                                    ) : ( <div className="text-center text-gray-400 py-12 flex flex-col items-center gap-2"><BookOpen size={32} className="opacity-20"/><span>暂无扩展内容</span></div> )}
                                 </div>
                             </div>
                         </div>
@@ -1417,21 +1168,14 @@ export default function HanziLearningApp() {
             </>
         )}
 
-        <AdminCharacterForm isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSaveToCloud} database={database} initialData={editingChar} lastMeta={lastMeta} />
-        <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} onLogin={handleLogin} isProcessing={isProcessingAuth} />
-        <CustomWordsModal isOpen={isCustomModalOpen} onClose={() => setIsCustomModalOpen(false)} customWords={customWords} onAdd={handleAddCustomWord} onDelete={handleDeleteCustomWord} isAdding={isCustomAdding} />
-        <ImportJsonModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onImport={handleBatchImport} />
-        <GameSettingsModal 
-            isOpen={isGameSettingsOpen} 
-            onClose={() => setIsGameSettingsOpen(false)} 
-            onStart={handleStartGame} 
-            database={database} 
-            userRole={user ? (ADMIN_EMAILS.includes(user.email) ? 'admin' : 'member') : 'visitor'} 
-            hasCustomWords={customWords.length > 0} 
-            gameType={pendingGameType} 
-        />
+        {/* --- Modals --- */}
+        <AdminCharacterForm isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={saveChar} database={database} initialData={editingChar} lastMeta={lastMeta} />
+        <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} onLogin={login} isProcessing={isAuthProcessing} />
+        <CustomWordsModal isOpen={isCustomModalOpen} onClose={() => setIsCustomModalOpen(false)} customWords={customWords} onAdd={handleCustomAddWrapper} onDelete={deleteCustomWord} isAdding={isCustomAdding} />
+        <ImportJsonModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onImport={batchImport} />
+        <GameSettingsModal isOpen={isGameSettingsOpen} onClose={() => setIsGameSettingsOpen(false)} onStart={handleStartGame} database={database} userRole={user ? (isAdmin ? 'admin' : 'member') : 'visitor'} hasCustomWords={customWords.length > 0} gameType={pendingGameType} />
         
-        <div className="text-center text-slate-400 text-sm py-6">© 2023 汉字学习宝 • Learning & Games v2.6</div>
+        <div className="text-center text-slate-400 text-sm py-6">© 2026 汉字学习宝 • Chinese Learning & Games )</div>
       </main>
     </div>
   );
