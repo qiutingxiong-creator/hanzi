@@ -4,8 +4,7 @@ import {
   ChevronRight, PlusCircle, Save, Play, PenTool, Edit3, Trash2, 
   User, LogOut, Cloud, Loader2, UploadCloud, CheckCircle2, XCircle, 
   FileJson, Download, Gamepad2, Trophy, Crown, HelpCircle, RefreshCw, Star,
-  Lock, Key, Mic, Activity, Settings,ArrowUp, ThumbsUp, ThumbsDown, Eye, EyeOff,
-  Library // <--- 新增这个
+  Lock, Key, Mic, Activity, Settings, ThumbsUp, ThumbsDown, Eye, EyeOff
 } from 'lucide-react';
 
 // === Firebase Imports ===
@@ -128,8 +127,7 @@ const getUserCustomCollection = (db, userId) => {
 // 2. 基础组件
 // ==========================================
 
-// 1. 修复写字板：接收 audioEnabled
-const HanziWriterBoard = ({ char, audioEnabled }) => { // <--- 接收参数
+const HanziWriterBoard = ({ char }) => {
   const writerRef = useRef(null);
   const divRef = useRef(null);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -172,10 +170,7 @@ const HanziWriterBoard = ({ char, audioEnabled }) => { // <--- 接收参数
   const startQuiz = () => {
     if (writerRef.current && typeof writerRef.current.quiz === 'function') {
       setMode('quiz');
-      writerRef.current.quiz({ onComplete: (res) => { 
-          alert(`太棒了！错误数: ${res.totalMistakes}`); 
-          speak("太棒了", audioEnabled); // <--- [修复] 传入 audioEnabled
-      } });
+      writerRef.current.quiz({ onComplete: (res) => { alert(`太棒了！错误数: ${res.totalMistakes}`); speak("太棒了"); } });
     }
   };
 
@@ -405,43 +400,18 @@ const GameSettingsModal = ({ isOpen, onClose, onStart, database, userRole, hasCu
     );
 };
 
-// ==========================================
-// 管理员录入表单 (带删除按钮)
-// ==========================================
-const AdminCharacterForm = ({ isOpen, onClose, onSave, onDelete, database, initialData, lastMeta }) => {
-  const defaultState = { 
-      char: '', pinyin: '', otherPinyins: '', 
-      definition: '', lesson: '', volume: '', 
-      structure: '独体字', radical: '', strokes: '', 
-      words: '', wordMeanings: '', sentences: '' 
-  };
-
-  const [formData, setFormData] = useState(defaultState);
+const AdminCharacterForm = ({ isOpen, onClose, onSave, database, initialData, lastMeta }) => {
+  const [formData, setFormData] = useState({ char: '', pinyin: '', definition: '', lesson: '', volume: '', structure: '独体字', radical: '', strokes: '', words: '', sentences: '' });
   const [isAutoFilled, setIsAutoFilled] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       if (initialData) {
-        // [编辑模式]
-        setFormData({ 
-            ...initialData, 
-            structure: initialData.structure || '独体字',
-            radical: initialData.radical || '',
-            strokes: initialData.strokes || '',
-            otherPinyins: initialData.otherPinyins || '',
-            words: Array.isArray(initialData.words) ? initialData.words.join('\n') : '', 
-            wordMeanings: Array.isArray(initialData.wordMeanings) ? initialData.wordMeanings.join('\n') : '',
-            sentences: Array.isArray(initialData.sentences) ? initialData.sentences.join('\n') : '' 
-        });
+        setFormData({ ...initialData, words: Array.isArray(initialData.words)?initialData.words.join('\n'):'', sentences: Array.isArray(initialData.sentences)?initialData.sentences.join('\n'):'' });
         setIsAutoFilled(true);
       } else {
-        // [新增模式]
-        setFormData({ 
-            ...defaultState,
-            lesson: lastMeta.lesson || '', 
-            volume: lastMeta.volume || ''
-        });
+        setFormData({ char: '', pinyin: '', definition: '', lesson: lastMeta.lesson||'', volume: lastMeta.volume||'', structure: '独体字', radical: '', strokes: '', words: '', sentences: '' });
         setIsAutoFilled(false);
       }
     }
@@ -450,37 +420,14 @@ const AdminCharacterForm = ({ isOpen, onClose, onSave, onDelete, database, initi
   const handleCharChange = (e) => {
     const inputChar = e.target.value;
     setFormData(prev => ({ ...prev, char: inputChar }));
-
     if (inputChar.length === 1 && !initialData) {
         const exist = database.find(i => i.char === inputChar);
         if (exist) {
-            // 剔除 ID，防止自动变为更新模式 (除非 ID 生成规则再次匹配)
-            const { id, ...dataWithoutId } = exist; 
-            setFormData(prev => ({ 
-                ...prev, 
-                ...dataWithoutId, 
-                structure: exist.structure || '独体字',
-                otherPinyins: exist.otherPinyins || '',
-                words: Array.isArray(exist.words) ? exist.words.join('\n') : '', 
-                wordMeanings: Array.isArray(exist.wordMeanings) ? exist.wordMeanings.join('\n') : '',
-                sentences: Array.isArray(exist.sentences) ? exist.sentences.join('\n') : '' 
-            }));
+            setFormData({ ...exist, words: Array.isArray(exist.words) ? exist.words.join('\n') : '', sentences: Array.isArray(exist.sentences) ? exist.sentences.join('\n') : '' });
             setIsAutoFilled(true);
         } else {
             const autoData = lookupCharData(inputChar);
-            setFormData(prev => ({ 
-                ...prev, 
-                pinyin: autoData.pinyin, 
-                lesson: prev.lesson || autoData.lesson, 
-                volume: prev.volume || autoData.volume, 
-                structure: autoData.structure || '独体字', 
-                radical: autoData.radical, 
-                strokes: autoData.strokes, 
-                words: autoData.words, 
-                wordMeanings: '',
-                sentences: autoData.sentences,
-                otherPinyins: ''
-            }));
+            setFormData(prev => ({ ...prev, pinyin: autoData.pinyin, lesson: lastMeta.lesson || autoData.lesson, volume: lastMeta.volume || autoData.volume, structure: autoData.structure, radical: autoData.radical, strokes: autoData.strokes, words: autoData.words, sentences: autoData.sentences }));
             setIsAutoFilled(false);
         }
     }
@@ -490,18 +437,14 @@ const AdminCharacterForm = ({ isOpen, onClose, onSave, onDelete, database, initi
     e.preventDefault();
     if (!formData.char) return;
     setIsSaving(true);
-    await onSave({ 
-        ...formData, 
-        words: formData.words.split('\n').filter(w => w.trim()), 
-        wordMeanings: formData.wordMeanings.split('\n').filter(w => w.trim()),
-        sentences: formData.sentences.split('\n').filter(s => s.trim()) 
-    });
+    await onSave({ ...formData, words: formData.words.split('\n').filter(w => w.trim()), sentences: formData.sentences.split('\n').filter(s => s.trim()) });
     setIsSaving(false);
     onClose();
   };
 
+  if (!isOpen) return null;
+
   return (
-    isOpen && (
     <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl animate-in fade-in zoom-in duration-200">
         <div className="flex justify-between items-center p-4 border-b border-gray-100">
@@ -514,52 +457,30 @@ const AdminCharacterForm = ({ isOpen, onClose, onSave, onDelete, database, initi
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div className="grid grid-cols-12 gap-4">
             <div className="col-span-3"><label className="block text-xs font-bold text-gray-500 mb-1">汉字 *</label><input required maxLength={1} className="w-full p-2 text-center text-xl font-bold border-2 border-teal-100 rounded-lg" value={formData.char} onChange={handleCharChange} placeholder="字" disabled={!!initialData} /></div>
-            <div className="col-span-4"><label className="block text-xs font-bold text-gray-500 mb-1">主拼音</label><input className="w-full p-2 border rounded-lg" value={formData.pinyin} onChange={e=>setFormData({...formData, pinyin:e.target.value})} placeholder="例如: cháng" /></div>
-            <div className="col-span-5"><label className="block text-xs font-bold text-gray-500 mb-1">多音字</label><input className="w-full p-2 border border-dashed border-gray-300 rounded-lg bg-gray-50" value={formData.otherPinyins} onChange={e=>setFormData({...formData, otherPinyins:e.target.value})} placeholder="例如: zhǎng" /></div>
+            <div className="col-span-4"><label className="block text-xs font-bold text-gray-500 mb-1">拼音</label><input className="w-full p-2 border rounded-lg" value={formData.pinyin} onChange={e=>setFormData({...formData, pinyin:e.target.value})} placeholder="pīn yīn" /></div>
+            <div className="col-span-5 flex items-end pb-2">{isAutoFilled ? <span className="text-xs text-green-600">已调用</span> : <span className="text-xs text-gray-400">自动查找...</span>}</div>
           </div>
-
           <div className="grid grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
              <div><label className="block text-xs font-bold text-gray-500 mb-1">册</label><input type="number" className="w-full p-2 border rounded-lg" value={formData.volume} onChange={e=>setFormData({...formData, volume:e.target.value})} /></div>
              <div><label className="block text-xs font-bold text-gray-500 mb-1">课次</label><input className="w-full p-2 border rounded-lg" value={formData.lesson} onChange={e=>setFormData({...formData, lesson:e.target.value})} /></div>
              <div><label className="block text-xs font-bold text-gray-500 mb-1">结构</label><select className="w-full p-2 border rounded-lg" value={formData.structure} onChange={e => setFormData({...formData, structure: e.target.value})}>{STRUCTURE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}</select></div>
           </div>
-          
           <div className="grid grid-cols-3 gap-4">
              <div><label className="block text-xs font-bold text-gray-500 mb-1">部首</label><input className="w-full p-2 border rounded-lg" value={formData.radical} onChange={e=>setFormData({...formData, radical:e.target.value})} /></div>
              <div><label className="block text-xs font-bold text-gray-500 mb-1">笔画数</label><input className="w-full p-2 border rounded-lg" value={formData.strokes} onChange={e=>setFormData({...formData, strokes:e.target.value})} /></div>
-             <div><label className="block text-xs font-bold text-gray-500 mb-1">生字释义 (英)</label><input className="w-full p-2 border rounded-lg" value={formData.definition} onChange={e=>setFormData({...formData, definition:e.target.value})} placeholder="Meaning"/></div>
+             <div><label className="block text-xs font-bold text-gray-500 mb-1">英文释义</label><input className="w-full p-2 border rounded-lg" value={formData.definition} onChange={e=>setFormData({...formData, definition:e.target.value})} /></div>
           </div>
-          
           <div className="grid grid-cols-2 gap-4">
-             <div><label className="block text-xs font-bold text-gray-500 mb-1">词语 (中)</label><textarea className="w-full p-2 border rounded-lg h-32 text-sm" value={formData.words} onChange={e=>setFormData({...formData, words:e.target.value})} /></div>
-             <div><label className="block text-xs font-bold text-gray-500 mb-1">词语释义 (英)</label><textarea className="w-full p-2 border border-blue-200 bg-blue-50 rounded-lg h-32 text-sm" value={formData.wordMeanings} onChange={e=>setFormData({...formData, wordMeanings:e.target.value})} /></div>
+             <div><label className="block text-xs font-bold text-gray-500 mb-1">词语</label><textarea className="w-full p-2 border rounded-lg h-32 text-sm" value={formData.words} onChange={e=>setFormData({...formData, words:e.target.value})} /></div>
+             <div><label className="block text-xs font-bold text-gray-500 mb-1">例句</label><textarea className="w-full p-2 border rounded-lg h-32 text-sm" value={formData.sentences} onChange={e=>setFormData({...formData, sentences:e.target.value})} /></div>
           </div>
-          
-          <div><label className="block text-xs font-bold text-gray-500 mb-1">例句</label><textarea className="w-full p-2 border rounded-lg h-24 text-sm" value={formData.sentences} onChange={e=>setFormData({...formData, sentences:e.target.value})} /></div>
-
-          <div className="pt-2 flex justify-between items-center">
-            {/* [新增] 删除按钮：只在编辑现有数据时显示 */}
-            <div>
-                {initialData && (
-                    <button 
-                        type="button" 
-                        onClick={() => onDelete(initialData.id)} 
-                        className="px-4 py-2 text-red-500 bg-red-50 hover:bg-red-100 rounded-lg font-bold flex items-center gap-2"
-                    >
-                        <Trash2 size={16}/> 删除
-                    </button>
-                )}
-            </div>
-            
-            <div className="flex gap-3">
-                <button type="button" onClick={onClose} className="px-5 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button>
-                <button type="submit" disabled={isSaving} className="px-6 py-2 bg-teal-600 text-white font-bold rounded-lg">{isSaving ? <Loader2 className="animate-spin"/> : <Save/>} {initialData ? "保存" : "添加"}</button>
-            </div>
+          <div className="pt-2 flex gap-3 justify-end">
+            <button type="button" onClick={onClose} className="px-5 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button>
+            <button type="submit" disabled={isSaving} className="px-6 py-2 bg-teal-600 text-white font-bold rounded-lg">{isSaving ? <Loader2 className="animate-spin"/> : <Save/>} {initialData ? "保存" : "添加"}</button>
           </div>
         </form>
       </div>
     </div>
-    )
   );
 };
 
@@ -680,21 +601,24 @@ const GameHeader = ({ title, current, total, audioEnabled, toggleAudio, onExit }
     </div>
 );
 
-// [游戏 1] 连词大作战 (修复静音)
-const SplitWordMatchGame = ({ items, onBack, db, audioEnabled }) => {
-    const [leftCol, setLeftCol] = useState([]); 
-    const [rightCol, setRightCol] = useState([]);
-    const [selectedLeft, setSelectedLeft] = useState(null); 
-    const [score, setScore] = useState(0); 
-    const [pairs, setPairs] = useState([]);
-    const [matchedId, setMatchedId] = useState(null);
-    const [wrongId, setWrongId] = useState(null);
+// [游戏 1] 连词大作战 (Split Word Match) - [修复] 增强词语提取逻辑
+const SplitWordMatchGame = ({ items, onBack }) => {
+    const [leftCol, setLeftCol] = useState([]); const [rightCol, setRightCol] = useState([]);
+    const [selectedLeft, setSelectedLeft] = useState(null); const [matchedPairs, setMatchedPairs] = useState([]);
+    const [score, setScore] = useState(0); const [pairs, setPairs] = useState([]);
 
     useEffect(() => {
+        // [修复] 增加对 items 是否存在的判断，以及 trim() 处理
         if (!items || items.length === 0) return;
+
         const allWords = items.flatMap(i => sanitizeWords(i.words || [])).filter(w => w && w.trim().length >= 2);
         const uniqueWords = [...new Set(allWords)];
-        if (uniqueWords.length === 0) { setPairs([]); return; }
+        
+        // 如果提取不到词语，避免报错，直接不生成
+        if (uniqueWords.length === 0) {
+            setPairs([]); return;
+        }
+
         const gameWords = uniqueWords.sort(() => Math.random() - 0.5).slice(0, 8).map((w, idx) => ({
             id: idx, full: w, left: w[0], right: w.slice(1)
         }));
@@ -703,93 +627,54 @@ const SplitWordMatchGame = ({ items, onBack, db, audioEnabled }) => {
         setRightCol(gameWords.map(w => ({ id: w.id, val: w.right })).sort(() => Math.random() - 0.5));
     }, [items]);
 
-    const handleLeft = (item) => { 
-        if (matchedId !== null) return;
-        setSelectedLeft(item); 
-        speak(item.val, audioEnabled); // [修复]
-    };
-
+    const handleLeft = (item) => { if (matchedPairs.find(p => p.id === item.id)) return; setSelectedLeft(item); speak(item.val); };
     const handleRight = (item) => {
-        if (!selectedLeft || matchedId !== null) return;
+        if (!selectedLeft || matchedPairs.find(p => p.id === item.id)) return;
         if (selectedLeft.id === item.id) {
             const word = pairs.find(p => p.id === item.id);
-            speak(word.full, audioEnabled); // [修复]
-            setMatchedId(item.id);
-            setScore(s => s + 10);
-            setTimeout(() => {
-                setLeftCol(prev => prev.filter(i => i.id !== item.id));
-                setRightCol(prev => prev.filter(i => i.id !== item.id));
-                setMatchedId(null); setSelectedLeft(null);
-            }, 500);
-        } else { 
-            speak("Wrong", audioEnabled); // [修复]
-            setWrongId(item.id); 
-            setTimeout(() => { setWrongId(null); setSelectedLeft(null); }, 500);
-        }
+            setMatchedPairs([...matchedPairs, word]); setScore(s => s + 10); speak(word.full); setSelectedLeft(null);
+        } else { speak("Wrong"); setSelectedLeft(null); }
     };
 
-    if (pairs.length > 0 && leftCol.length === 0) 
-        return <GameOverModal score={score} total={pairs.length * 10} gameType="splitMatch" onRestart={onBack} onExit={onBack} db={db}/>;
+    if (pairs.length > 0 && matchedPairs.length === pairs.length) return <GameOverModal score={score} total={pairs.length * 10} onRestart={onBack} onExit={onBack} />;
     
+    // [改进] 提示信息更友好
     if (pairs.length === 0) return <div className="p-8 text-center text-gray-400 flex flex-col items-center justify-center h-full"><Search size={48} className="mb-4 text-gray-200"/> 没有找到足够的双字词语数据 <br/><span className="text-sm text-gray-300 mt-2">请尝试选择其他课程或添加更多含有词语的生字</span></div>;
 
     return (
-        <div className="flex flex-col h-full max-w-3xl mx-auto">
-            <GameHeader title="连词大作战" current={pairs.length - leftCol.length} total={pairs.length} onExit={onBack} />
-            <div className="flex-1 flex gap-4 sm:gap-12 p-4 justify-center">
-                <div className="flex-1 flex flex-col gap-3 transition-all duration-300">
-                    {leftCol.map(l => {
-                        let baseStyle = "h-16 rounded-2xl text-2xl font-bold border-2 transition-all duration-200 shadow-sm flex items-center justify-center relative ";
-                        if (matchedId === l.id) baseStyle += "bg-green-500 text-white border-green-500 scale-105 z-10 ";
-                        else if (selectedLeft?.id === l.id) baseStyle += "bg-indigo-500 text-white border-indigo-600 scale-105 shadow-md ";
-                        else baseStyle += "bg-white border-indigo-100 text-indigo-900 hover:bg-indigo-50 ";
-                        return (<button key={l.id} onClick={() => handleLeft(l)} className={baseStyle}>{l.val}<span className="absolute right-2 opacity-20">...</span></button>);
-                    })}
-                </div>
-                <div className="flex-1 flex flex-col gap-3 transition-all duration-300">
-                    {rightCol.map(r => {
-                        let baseStyle = "h-16 rounded-2xl text-2xl font-bold border-2 transition-all duration-200 shadow-sm flex items-center justify-center relative ";
-                        if (matchedId === r.id) baseStyle += "bg-green-500 text-white border-green-500 scale-105 z-10 ";
-                        else if (wrongId === r.id) baseStyle += "bg-red-500 text-white border-red-500 animate-shake ";
-                        else baseStyle += "bg-white border-purple-100 text-purple-900 hover:bg-purple-50 ";
-                        return (<button key={r.id} onClick={() => handleRight(r)} className={baseStyle}><span className="absolute left-2 opacity-20">...</span>{r.val}</button>);
-                    })}
-                </div>
+        <div className="flex flex-col h-full">
+            <GameHeader title="连词大作战" current={matchedPairs.length} total={pairs.length} onExit={onBack} />
+            <div className="flex-1 flex gap-8 p-4">
+                <div className="flex-1 flex flex-col gap-3">{leftCol.map(l => <button key={l.id} onClick={() => handleLeft(l)} disabled={matchedPairs.find(p=>p.id===l.id)} className={`h-16 rounded-xl text-2xl font-bold border-2 transition-all ${selectedLeft?.id===l.id ? 'bg-indigo-500 text-white border-indigo-600' : 'bg-white border-indigo-100 text-indigo-900'} ${matchedPairs.find(p=>p.id===l.id) ? 'opacity-0' : 'opacity-100'}`}>{l.val}...</button>)}</div>
+                <div className="flex-1 flex flex-col gap-3">{rightCol.map(r => <button key={r.id} onClick={() => handleRight(r)} disabled={matchedPairs.find(p=>p.id===r.id)} className={`h-16 rounded-xl text-2xl font-bold border-2 transition-all bg-white border-purple-100 text-purple-900 hover:bg-purple-50 ${matchedPairs.find(p=>p.id===r.id) ? 'opacity-0' : 'opacity-100'}`}>...{r.val}</button>)}</div>
             </div>
         </div>
     );
 };
 
-// [游戏 2] 拼音对对碰 (修复静音)
-const PinyinMatchGame = ({ items, onBack, db, audioEnabled }) => {
+// [游戏 2] 拼音对对碰 (Char vs Pinyin) - [恢复] 仅限单字
+const PinyinMatchGame = ({ items, onBack }) => {
     const [leftCol, setLeftCol] = useState([]); const [rightCol, setRightCol] = useState([]);
     const [selectedLeft, setSelectedLeft] = useState(null); const [matchedIds, setMatchedIds] = useState([]);
     
     useEffect(() => {
+        // [恢复] 只处理单字，不处理词语
         let gameItems = items.map((item, idx) => ({ id: idx, char: item.char, pinyin: item.pinyin }));
+        
+        // 过滤掉没有内容的项目
         gameItems = gameItems.filter(i => i.char && i.char.trim());
+
         setLeftCol(gameItems.sort(() => Math.random() - 0.5));
         setRightCol([...gameItems].sort(() => Math.random() - 0.5));
     }, [items]);
 
-    const handleLeft = (item) => { 
-        if (matchedIds.includes(item.id)) return; 
-        setSelectedLeft(item); 
-        speak(item.char, audioEnabled); // [修复]
-    };
+    const handleLeft = (item) => { if (matchedIds.includes(item.id)) return; setSelectedLeft(item); speak(item.char); };
     const handleRight = (item) => {
         if (!selectedLeft || matchedIds.includes(item.id)) return;
-        if (selectedLeft.id === item.id) { 
-            setMatchedIds([...matchedIds, item.id]); setSelectedLeft(null); 
-            speak("Right", audioEnabled); // [修复]
-        } else { 
-            speak("Wrong", audioEnabled); // [修复]
-            setSelectedLeft(null); 
-        }
+        if (selectedLeft.id === item.id) { setMatchedIds([...matchedIds, item.id]); setSelectedLeft(null); speak("Right"); } else { speak("Wrong"); setSelectedLeft(null); }
     };
 
-    if (matchedIds.length > 0 && matchedIds.length === leftCol.length) 
-        return <GameOverModal score={100} total={100} gameType="pinyinMatch" onRestart={onBack} onExit={onBack} db={db}/>;
+    if (matchedIds.length > 0 && matchedIds.length === leftCol.length) return <GameOverModal score={100} total={100} onRestart={onBack} onExit={onBack} />;
 
     return (
         <div className="flex flex-col h-full">
@@ -797,12 +682,18 @@ const PinyinMatchGame = ({ items, onBack, db, audioEnabled }) => {
             <div className="flex-1 flex gap-4 p-4 overflow-y-auto">
                 <div className="flex-1 grid grid-cols-2 gap-3 content-start">
                     {leftCol.map(l => (
-                        <button key={l.id} onClick={() => handleLeft(l)} disabled={matchedIds.includes(l.id)} className={`h-24 rounded-xl text-3xl font-serif font-bold border-2 transition-all shadow-sm ${selectedLeft?.id===l.id ? 'bg-pink-500 text-white border-pink-600 scale-105' : 'bg-white border-pink-100 text-slate-700 hover:border-pink-300'} ${matchedIds.includes(l.id) ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>{l.char}</button>
+                        <button key={l.id} onClick={() => handleLeft(l)} disabled={matchedIds.includes(l.id)} 
+                            className={`h-24 rounded-xl text-3xl font-serif font-bold border-2 transition-all shadow-sm ${selectedLeft?.id===l.id ? 'bg-pink-500 text-white border-pink-600 scale-105' : 'bg-white border-pink-100 text-slate-700 hover:border-pink-300'} ${matchedIds.includes(l.id) ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+                            {l.char}
+                        </button>
                     ))}
                 </div>
                 <div className="flex-1 grid grid-cols-2 gap-3 content-start">
                     {rightCol.map(r => (
-                        <button key={r.id} onClick={() => handleRight(r)} disabled={matchedIds.includes(r.id)} className={`h-24 rounded-xl text-2xl font-bold border-2 transition-all shadow-sm bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 ${matchedIds.includes(r.id) ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>{r.pinyin}</button>
+                        <button key={r.id} onClick={() => handleRight(r)} disabled={matchedIds.includes(r.id)} 
+                            className={`h-24 rounded-xl text-2xl font-bold border-2 transition-all shadow-sm bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 ${matchedIds.includes(r.id) ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+                            {r.pinyin}
+                        </button>
                     ))}
                 </div>
             </div>
@@ -811,7 +702,7 @@ const PinyinMatchGame = ({ items, onBack, db, audioEnabled }) => {
 };
 
 // [游戏 3] 基因匹配 (Original Word Match)
-{/*const GeneMatchGame = ({ items, onBack, contentType ,db}) => {
+{/*const GeneMatchGame = ({ items, onBack, contentType }) => {
     const [words, setWords] = useState([]); const [definitions, setDefinitions] = useState([]);
     const [selectedWord, setSelectedWord] = useState(null); const [matchedIds, setMatchedIds] = useState([]);
     useEffect(() => {
@@ -833,7 +724,7 @@ const PinyinMatchGame = ({ items, onBack, db, audioEnabled }) => {
         if (!selectedWord || matchedIds.includes(id)) return;
         if (selectedWord === id) { setMatchedIds([...matchedIds, id]); setSelectedWord(null); speak("Right"); } else { speak("Wrong"); setSelectedWord(null); }
     };
-    if (matchedIds.length > 0 && matchedIds.length === words.length) return <GameOverModal score={100} total={100} onRestart={onBack} onExit={onBack} db={db} />;
+    if (matchedIds.length > 0 && matchedIds.length === words.length) return <GameOverModal score={100} total={100} onRestart={onBack} onExit={onBack} />;
 
     return (
         <div className="flex flex-col h-full">
@@ -846,100 +737,123 @@ const PinyinMatchGame = ({ items, onBack, db, audioEnabled }) => {
     );
 };*/}
 
-// [游戏] 朗读挑战 (修复同音字识别问题：他/她，的/地/得)
-const ReadMatchGame = ({ items, onBack, db, audioEnabled }) => {
+// [改进] 朗读挑战 (Read Match) - 集成 Web Speech API
+const ReadMatchGame = ({ items, onBack }) => {
     const [index, setIndex] = useState(0);
     const [isListening, setIsListening] = useState(false); 
-    const [feedback, setFeedback] = useState(null); 
+    const [feedback, setFeedback] = useState(null); // null, 'listening', 'correct', 'incorrect'
     const [recognizedText, setRecognizedText] = useState("");
 
     const sentences = useMemo(() => {
         return items.flatMap(item => {
             const sList = sanitizeWords(item.sentences);
-            // 这里保留 original 用于显示，clean 用于基础过滤
             return sList.map(s => ({ original: s, clean: normalizeText(s), hint: item.char }));
         }).filter(s => s.original.length > 2).slice(0, 10);
     }, [items]);
     
     const current = sentences[index];
 
-    // [新增] 智能标准化函数：解决同音字误判
-    const smartNormalize = (text) => {
-        if (!text) return "";
-        return text
-            // 1. 移除标点和空格 (基础标准化)
-            .replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, "")
-            .toLowerCase()
-            // 2. 同音字模糊化处理 (关键修复)
-            .replace(/[他她它]/g, "ta")   // 把所有的 tā 都变成 "ta"
-            .replace(/[的地得]/g, "de")   // 把所有的 de 都变成 "de"
-            .replace(/[做作]/g, "zuo")    // 把所有的 zuò 都变成 "zuo"
-            .replace(/[那哪]/g, "na");    // 容错那/哪
-    };
-
+    // 语音识别逻辑
     const startListening = () => {
         if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
             alert("您的浏览器不支持语音识别，将使用模拟模式。请使用 Chrome 浏览器体验完整功能。");
             simulateListening();
             return;
         }
+
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const recognition = new SpeechRecognition();
         recognition.lang = 'zh-CN';
         recognition.continuous = false;
         recognition.interimResults = false;
-        setIsListening(true); setFeedback('listening'); setRecognizedText("");
+
+        setIsListening(true);
+        setFeedback('listening');
+        setRecognizedText("");
+
         recognition.onresult = (event) => {
             const transcript = event.results[0][0].transcript;
-            setRecognizedText(transcript); checkResult(transcript); setIsListening(false);
+            setRecognizedText(transcript);
+            checkResult(transcript);
+            setIsListening(false);
         };
-        recognition.onerror = (event) => { console.error("Speech error", event.error); setIsListening(false); setFeedback('error'); };
-        recognition.onend = () => { setIsListening(false); };
+
+        recognition.onerror = (event) => {
+            console.error("Speech error", event.error);
+            setIsListening(false);
+            setFeedback('error');
+        };
+
+        recognition.onend = () => {
+            setIsListening(false);
+        };
+
         recognition.start();
     };
 
     const simulateListening = () => {
         setIsListening(true); setFeedback('listening');
-        // 模拟模式直接通过
-        setTimeout(() => { setIsListening(false);  checkResult(current.clean); }, 1500);
+        setTimeout(() => {
+            setIsListening(false); 
+            checkResult(current.clean);
+        }, 1500);
     };
 
-    // [修改] 比对逻辑：使用 smartNormalize
+    // [改进] 比对逻辑，利用更严格的 normalizeText
     const checkResult = (transcript) => {
-        // 对 识别结果 和 目标句子 都进行“同音字模糊化”
-        const spokenSmart = smartNormalize(transcript);
-        const targetSmart = smartNormalize(current.original); // 注意：这里用 original 重新处理
-
-        // 只要包含核心发音即可
-        if (spokenSmart.includes(targetSmart) || targetSmart.includes(spokenSmart) || spokenSmart === targetSmart) {
+        const spoken = normalizeText(transcript);
+        const target = current.clean;
+        
+        // 只要包含目标内容的核心文字即可（因为已经去除了所有标点和空格）
+        if (spoken.includes(target) || target.includes(spoken) || spoken === target) {
             setFeedback('correct'); 
-            speak("太棒了", audioEnabled);
+            speak("太棒了"); 
             setTimeout(() => { 
                 setRecognizedText("");
-                if (index < sentences.length - 1) { setIndex(prev => prev + 1); setFeedback(null); } else { setIndex(prev => prev + 1); } 
+                if (index < sentences.length - 1) { 
+                    setIndex(prev => prev + 1); setFeedback(null); 
+                } else { 
+                    setIndex(prev => prev + 1); 
+                } 
             }, 1500); 
         } else { 
             setFeedback('incorrect'); 
-            speak("再试一次", audioEnabled);
+            speak("再试一次");
         }
     };
 
-    if (!current) return <GameOverModal score={100} total={100} gameType="readMatch" onRestart={onBack} onExit={onBack} db={db}/>;
+    if (!current) return <GameOverModal score={100} total={100} onRestart={onBack} onExit={onBack} />;
     
     return (
         <div className="flex flex-col h-full items-center p-6">
             <GameHeader title="朗读挑战" current={index + 1} total={sentences.length} onExit={onBack} />
+            
             <div className="text-gray-400 font-bold mb-4 text-xl tracking-widest bg-gray-50 px-4 py-1 rounded-full">{current.hint}</div>
+            
             <div className="w-full bg-white p-8 rounded-3xl border-2 border-blue-100 flex flex-col items-center justify-center min-h-[200px] shadow-sm mb-6">
                 <p className="text-2xl font-medium text-slate-800 text-center leading-loose">{current.original}</p>
-                {recognizedText && ( <div className="mt-4 text-sm text-gray-500 bg-gray-50 px-3 py-1 rounded-lg">识别结果: "{recognizedText}"</div> )}
+                {recognizedText && (
+                    <div className="mt-4 text-sm text-gray-500 bg-gray-50 px-3 py-1 rounded-lg">
+                        识别结果: "{recognizedText}"
+                    </div>
+                )}
             </div>
+
             <div className="flex flex-col items-center gap-4">
                 {feedback === 'listening' && <div className="text-blue-500 animate-pulse font-bold">正在聆听...</div>}
                 {feedback === 'correct' && <div className="text-green-500 font-bold flex items-center gap-2"><CheckCircle2/> 发音准确</div>}
                 {feedback === 'incorrect' && <div className="text-red-500 font-bold flex items-center gap-2"><XCircle/> 请重读</div>}
                 {feedback === 'error' && <div className="text-gray-400 text-xs">识别失败，请检查麦克风权限</div>}
-                <button onClick={startListening} disabled={isListening || feedback === 'correct'} className={`w-24 h-24 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 ${isListening ? 'bg-red-500 scale-110 ring-8 ring-red-100' : feedback === 'correct' ? 'bg-green-500 scale-0' : 'bg-blue-600 hover:bg-blue-700 hover:scale-105'}`}>
+
+                <button 
+                    onClick={startListening} 
+                    disabled={isListening || feedback === 'correct'}
+                    className={`w-24 h-24 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 ${
+                        isListening ? 'bg-red-500 scale-110 ring-8 ring-red-100' : 
+                        feedback === 'correct' ? 'bg-green-500 scale-0' : 
+                        'bg-blue-600 hover:bg-blue-700 hover:scale-105'
+                    }`}
+                >
                     {isListening ? <Activity className="text-white animate-pulse" size={40}/> : <Mic className="text-white" size={40}/>}
                 </button>
                 <p className="text-gray-400 text-sm mt-2">点击话筒，大声朗读例句</p>
@@ -948,9 +862,10 @@ const ReadMatchGame = ({ items, onBack, db, audioEnabled }) => {
     );
 };
 
-// [游戏] 闪卡 (修复静音)
-const FlashCardGame = ({ items, onBack, db, contentType, audioEnabled }) => { // 接收 audioEnabled
+// [恢复] 闪卡记忆 (FlashCard) - 网格 + 弹窗 + 老师评分 + 手动发音
+const FlashCardGame = ({ items, onBack, db, contentType }) => { // 接收 contentType
     const [score, setScore] = useState(0);
+    const [audioEnabled, setAudioEnabled] = useState(false); 
     const [cards, setCards] = useState([]);
     const [collected, setCollected] = useState([]);
     const [mistakes, setMistakes] = useState([]);
@@ -960,55 +875,89 @@ const FlashCardGame = ({ items, onBack, db, contentType, audioEnabled }) => { //
 
     useEffect(() => {
         let allCardsData = [];
+        
+        // [修复] 根据 contentType 生成卡片
         if (contentType === 'sentences') {
+            // 例句模式
             items.forEach(item => {
                 const sList = sanitizeWords(item.sentences);
                 if (sList.length > 0) {
                     sList.forEach(s => {
-                        allCardsData.push({ text: s, pinyin: '', sentence: '', definition: `${item.char} (${item.pinyin}) - ${item.definition || '暂无释义'}` });
+                        allCardsData.push({
+                            text: s,
+                            pinyin: '', 
+                            sentence: '', // 正面就是例句，所以不需要额外例句字段
+                            definition: `${item.char} (${item.pinyin}) - ${item.definition || '暂无释义'}` // 背面显示生字信息
+                        });
                     });
                 }
             });
         } else if (contentType === 'words') {
+            // 词语模式
             items.forEach(item => {
                 const wList = sanitizeWords(item.words);
                 const sList = sanitizeWords(item.sentences);
                 if (wList.length > 0) {
                     wList.forEach((word, idx) => {
-                        allCardsData.push({ text: word, pinyin: item.pinyin || '', sentence: sList[idx] || '', definition: item.definition });
+                        allCardsData.push({ 
+                            text: word, 
+                            pinyin: item.pinyin || '',
+                            sentence: sList[idx] || '', 
+                            definition: item.definition 
+                        });
                     });
                 }
             });
         } else {
+            // 生字模式 (默认)
             items.forEach(item => {
                 const sList = sanitizeWords(item.sentences);
                 if (item.char) {
-                    allCardsData.push({ text: item.char, pinyin: item.pinyin, sentence: sList[0] || '', definition: item.definition });
+                    allCardsData.push({ 
+                        text: item.char, 
+                        pinyin: item.pinyin,
+                        sentence: sList[0] || '', 
+                        definition: item.definition
+                    });
                 }
             });
         }
+
+        // 去重逻辑 (针对 text)
         const uniqueMap = new Map();
         allCardsData.forEach(w => uniqueMap.set(w.text, w));
         const uniqueCards = Array.from(uniqueMap.values());
+
         const gameCards = uniqueCards.sort(() => Math.random() - 0.5).slice(0, 20).map((w,i) => ({
-            id: i, content: w.text, pinyin: w.pinyin, sentence: w.sentence, definition: w.definition, status: 'hidden'
+            id: i, 
+            content: w.text, 
+            pinyin: w.pinyin,
+            sentence: w.sentence, 
+            definition: w.definition,
+            status: 'hidden'
         }));
         setCards(gameCards);
     }, [items, contentType]);
 
     const handleFlip = (card) => {
-        speak(card.content, audioEnabled); // [修复]
-        setFlippedCard(card); 
+        speak(card.content, audioEnabled);
+        setFlippedCard(card); // Open Modal
         setShowPinyin(false); 
     };
 
     const handleGrade = (isCorrect) => {
         if (!flippedCard) return;
         const cardId = flippedCard.id;
+        
         setCards(prev => prev.filter(c => c.id !== cardId));
-        setFlippedCard(null); 
-        if (isCorrect) { setScore(s => s + 1); setCollected(prev => [...prev, flippedCard]); } 
-        else { setMistakes(prev => [...prev, { ...flippedCard, status: 'hidden' }]); }
+        setFlippedCard(null); // Close Modal
+
+        if (isCorrect) {
+            setScore(s => s + 1);
+            setCollected(prev => [...prev, flippedCard]);
+        } else {
+            setMistakes(prev => [...prev, { ...flippedCard, status: 'hidden' }]); 
+        }
     };
 
     const handleRetryMistakes = () => {
@@ -1033,8 +982,9 @@ const FlashCardGame = ({ items, onBack, db, contentType, audioEnabled }) => { //
                     {mistakes.length > 0 && cards.length === 0 && <button onClick={handleRetryMistakes} className="mt-3 w-full py-2 bg-red-500 text-white rounded-xl text-sm font-bold shadow-md animate-bounce"><RefreshCw size={14} className="inline mr-1"/> 重练错题</button>}
                 </div>
             </div>
+
             <div className="flex-1 flex flex-col">
-                <GameHeader title={getTitle()} current={collected.length} total={collected.length + cards.length + mistakes.length} onExit={onBack} />
+                <GameHeader title={getTitle()} current={collected.length} total={collected.length + cards.length + mistakes.length} audioEnabled={audioEnabled} toggleAudio={() => setAudioEnabled(!audioEnabled)} onExit={onBack} />
                 <div className="flex-1 bg-slate-50/50 rounded-3xl border border-slate-200 p-4 overflow-y-auto relative">
                     {cards.length > 0 ? (
                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -1047,6 +997,7 @@ const FlashCardGame = ({ items, onBack, db, contentType, audioEnabled }) => { //
                     ) : <div className="h-full flex flex-col items-center justify-center text-gray-400"><Star size={48} className="text-yellow-400 mb-4"/><p>练习完成！</p><button onClick={() => setGameOver(true)} className="mt-6 px-8 py-3 bg-teal-600 text-white rounded-full font-bold shadow-lg">查看成绩</button></div>}
                 </div>
             </div>
+
             <div className="w-48 flex flex-col gap-4">
                 <div className="bg-green-50 rounded-2xl border border-green-100 p-4 h-full flex flex-col">
                     <h3 className="text-xs font-bold text-green-600 uppercase tracking-wider mb-2 flex items-center gap-2"><Save size={14}/> 收集箱 ({score})</h3>
@@ -1055,25 +1006,62 @@ const FlashCardGame = ({ items, onBack, db, contentType, audioEnabled }) => { //
                     </div>
                 </div>
             </div>
+
+            {/* BIG CARD MODAL */}
             {flippedCard && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 animate-in fade-in duration-200 backdrop-blur-sm">
                     <div className="bg-white w-full max-w-5xl aspect-[4/3] rounded-[2rem] shadow-2xl flex flex-col items-center justify-center p-8 relative animate-in zoom-in-95 duration-300 border-8 border-teal-100">
-                        <button onClick={() => speak(flippedCard.content, audioEnabled)} className="absolute top-8 left-8 p-3 bg-teal-50 text-teal-600 rounded-full hover:bg-teal-100 transition shadow-sm z-50"><Volume2 size={24}/></button>
-                        <div className="absolute top-8 right-8"><button onClick={() => setShowPinyin(!showPinyin)} className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200 transition">{showPinyin ? <EyeOff size={20}/> : <Eye size={20}/>}{showPinyin ? "隐藏拼音" : "查看拼音"}</button></div>
+                        {/* Audio Button - Manual Trigger */}
+                        <button onClick={() => speak(flippedCard.content)} className="absolute top-8 left-8 p-3 bg-teal-50 text-teal-600 rounded-full hover:bg-teal-100 transition shadow-sm z-50">
+                            <Volume2 size={24}/>
+                        </button>
+
+                        <div className="absolute top-8 right-8">
+                            <button onClick={() => setShowPinyin(!showPinyin)} className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200 transition">
+                                {showPinyin ? <EyeOff size={20}/> : <Eye size={20}/>}
+                                {showPinyin ? "隐藏拼音" : "查看拼音"}
+                            </button>
+                        </div>
+
                         <div className="flex-1 flex flex-col items-center justify-center w-full">
                             {showPinyin && <div className="text-5xl font-bold text-gray-400 mb-4">{flippedCard.pinyin}</div>}
-                            <div className={`font-bold text-slate-800 leading-tight text-center break-words ${contentType === 'sentences' ? 'text-6xl px-12' : 'text-[10rem]'}`} style={{ fontFamily: '"KaiTi", "STKaiti", "SimKai", serif', lineHeight: '1.1' }}>{flippedCard.content}</div>
-                            {contentType !== 'sentences' && flippedCard.sentence && (<div className="mt-6 text-xl text-slate-500 max-w-2xl text-center bg-slate-50 px-6 py-3 rounded-xl border border-slate-100"><span className="font-bold mr-2 text-slate-400">例句:</span>{flippedCard.sentence}</div>)}
-                            {contentType === 'sentences' && flippedCard.definition && (<div className="mt-6 text-xl text-slate-500 max-w-2xl text-center bg-slate-50 px-6 py-3 rounded-xl border border-slate-100"><span className="font-bold mr-2 text-slate-400">来源:</span>{flippedCard.definition}</div>)}
+                            <div 
+                                className={`font-bold text-slate-800 leading-tight text-center break-words ${contentType === 'sentences' ? 'text-6xl px-12' : 'text-[10rem]'}`}
+                                style={{ fontFamily: '"KaiTi", "STKaiti", "SimKai", serif', lineHeight: '1.1' }}
+                            >
+                                {flippedCard.content}
+                            </div>
+                            
+                            {/* 如果是生字或词语模式，显示例句 */}
+                            {contentType !== 'sentences' && flippedCard.sentence && (
+                                <div className="mt-6 text-xl text-slate-500 max-w-2xl text-center bg-slate-50 px-6 py-3 rounded-xl border border-slate-100">
+                                    <span className="font-bold mr-2 text-slate-400">例句:</span>
+                                    {flippedCard.sentence}
+                                </div>
+                            )}
+
+                            {/* 如果是例句模式，显示来源释义 */}
+                            {contentType === 'sentences' && flippedCard.definition && (
+                                <div className="mt-6 text-xl text-slate-500 max-w-2xl text-center bg-slate-50 px-6 py-3 rounded-xl border border-slate-100">
+                                    <span className="font-bold mr-2 text-slate-400">来源:</span>
+                                    {flippedCard.definition}
+                                </div>
+                            )}
                         </div>
+
                         <div className="flex gap-12 mb-8 mt-4">
-                            <button onClick={() => handleGrade(true)} className="p-3 bg-green-100 text-green-600 rounded-full hover:bg-green-500 hover:text-white transition transform hover:scale-110 shadow-lg"><CheckCircle2 size={40}/></button>
-                            <button onClick={() => handleGrade(false)} className="p-3 bg-red-100 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition transform hover:scale-110 shadow-lg"><XCircle size={40}/></button>
+                            <button onClick={() => handleGrade(true)} className="p-3 bg-green-100 text-green-600 rounded-full hover:bg-green-500 hover:text-white transition transform hover:scale-110 shadow-lg">
+                                <CheckCircle2 size={40}/>
+                            </button>
+                            <button onClick={() => handleGrade(false)} className="p-3 bg-red-100 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition transform hover:scale-110 shadow-lg">
+                                <XCircle size={40}/>
+                            </button>
                         </div>
                         <p className="absolute bottom-6 text-gray-400 text-sm">请朗读内容，老师评分</p>
                     </div>
                 </div>
             )}
+
             {gameOver && <GameOverModal score={score} total={collected.length + mistakes.length} gameType="flashcards" onRestart={() => window.location.reload()} onExit={onBack} db={db} />}
         </div>
     );
@@ -1111,104 +1099,9 @@ const GameSelector = ({ onOpenSettings }) => (
         </div>
     </div>
 );
-// ==========================================
-// 5. 字典/课本视图组件
-// ==========================================
-const DictionaryView = ({ database, onSelectChar }) => {
-  const [filterText, setFilterText] = useState("");
-  const [showBackToTop, setShowBackToTop] = useState(false);
-
-  useEffect(() => {
-    const handleScroll = () => setShowBackToTop(window.scrollY > 300);
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
-
-  const dictionaryData = useMemo(() => {
-    const structure = {}; const allVols = new Set();
-    const filteredItems = database.filter(item => {
-        if (!filterText) return true;
-        const lower = filterText.toLowerCase();
-        const cleanPinyin = item.pinyin ? item.pinyin.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() : "";
-        return (item.char.includes(lower) || (item.pinyin && item.pinyin.toLowerCase().includes(lower)) || cleanPinyin.includes(lower));
-    });
-    const firstMatch = filteredItems.length > 0 ? filteredItems[0] : null; // Define firstMatch
-
-    filteredItems.forEach(item => {
-      const vol = item.volume && item.volume !== '-' ? item.volume : '其他';
-      allVols.add(vol);
-      let letter = '#';
-      if (item.pinyin && item.pinyin.length > 0) {
-        const clean = item.pinyin.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-        if (clean.length > 0) {
-            const first = clean.charAt(0).toUpperCase();
-            if (/[A-Z]/.test(first)) letter = first;
-        }
-      }
-      if (!structure[vol]) structure[vol] = {};
-      if (!structure[vol][letter]) structure[vol][letter] = [];
-      structure[vol][letter].push(item);
-    });
-
-    const sortedVols = Array.from(allVols).sort((a, b) => {
-      if (a === '其他') return 1; if (b === '其他') return -1; return parseInt(a) - parseInt(b);
-    });
-    sortedVols.forEach(vol => {
-      Object.keys(structure[vol]).forEach(key => structure[vol][key].sort((a, b) => a.pinyin.localeCompare(b.pinyin)));
-    });
-    
-    return { sortedVols, structure, totalCount: filteredItems.length, firstMatch }; // Return firstMatch
-  }, [database, filterText]);
-
-  const alphabet = Array.from("ABCDEFGHIJKLMNOPQRSTUVWXYZ#");
-
-  return (
-    <div className="bg-white min-h-[80vh] rounded-3xl shadow-sm border border-slate-200 p-8 animate-in fade-in duration-300 relative">
-      <div className="mb-8 border-b border-slate-100 pb-4 flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div><h2 className="text-3xl font-bold text-slate-800 flex items-center gap-3"><Library className="text-teal-600" size={32}/> 生字总表</h2><p className="text-slate-500 mt-2 text-sm">暨南大学中文 • 共 {dictionaryData.totalCount} 个字</p></div>
-        <div className="relative group w-full md:w-64">
-             <input type="text" placeholder="筛选拼音或汉字..." value={filterText} onChange={(e) => setFilterText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && dictionaryData.firstMatch) { onSelectChar(dictionaryData.firstMatch); setFilterText(""); } }} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all"/>
-             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16}/>
-             {filterText && <button onClick={() => setFilterText("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><XCircle size={14} className="fill-slate-200 text-slate-500"/></button>}
-        </div>
-      </div>
-      {dictionaryData.totalCount === 0 ? <div className="text-center text-gray-400 py-20 flex flex-col items-center"><Search size={48} className="text-slate-200 mb-4"/><p>没有找到匹配的生字</p>{filterText && <button onClick={() => setFilterText("")} className="mt-4 text-teal-600 font-bold hover:underline">清除筛选</button>}</div> : (
-        <div className="space-y-12 pb-10">
-            {dictionaryData.sortedVols.map(vol => (
-            <div key={vol} className="relative">
-                <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm py-3 border-b-2 border-teal-100 mb-6"><h3 className="text-2xl font-black text-teal-800 flex items-center gap-2"><span className="w-2 h-8 bg-teal-600 rounded-full inline-block"></span>{vol === '其他' ? '其他生字' : `第 ${vol} 册`}</h3></div>
-                <div className="pl-2 sm:pl-4 space-y-6">
-                {alphabet.map(letter => {
-                    const items = dictionaryData.structure[vol]?.[letter];
-                    if (!items || items.length === 0) return null;
-                    return (
-                    <div key={letter} className="flex gap-4 sm:gap-8 border-b border-dashed border-slate-100 pb-4 last:border-0">
-                        <div className="w-8 shrink-0 pt-2"><span className="text-2xl font-serif font-black text-slate-300">{letter}</span></div>
-                        <div className="flex-1 flex flex-wrap gap-x-8 gap-y-6">
-                        {items.map(char => (
-                            <button key={char.id} onClick={() => onSelectChar(char)} className="group flex flex-col items-center hover:-translate-y-1 transition-transform cursor-pointer">
-                            <span className="text-sm font-medium text-purple-400 mb-0.5 group-hover:text-purple-600">{char.pinyin}</span>
-                            <div className="relative"><span className="text-3xl font-serif text-slate-800 group-hover:text-teal-600">{char.char}</span>{char.lesson && <span className="absolute -bottom-1 -right-4 text-[15px] font-bold text-slate-400 scale-75 origin-left">{char.lesson}</span>}</div>
-                            </button>
-                        ))}
-                        </div>
-                    </div>
-                    );
-                })}
-                </div>
-            </div>
-            ))}
-        </div>
-      )}
-      <button onClick={scrollToTop} className={`fixed bottom-8 right-8 z-50 bg-teal-600 text-white p-3 rounded-full shadow-xl shadow-teal-200 transition-all duration-300 hover:bg-teal-700 hover:scale-110 active:scale-95 ${showBackToTop ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 pointer-events-none'}`}><ArrowUp size={24} strokeWidth={3} /></button>
-    </div>
-  );
-};
 
 // ==========================================
-// 主应用 (Main) - 支持全局静音控制
+// 主应用 (Main)
 // ==========================================
 export default function HanziLearningApp() {
   const [database, setDatabase] = useState([]); 
@@ -1217,9 +1110,6 @@ export default function HanziLearningApp() {
   const [selectedChar, setSelectedChar] = useState(null);
   const [showList, setShowList] = useState(false);
   
-  // [新增] 全局音频状态：默认为 false (静音)
-  const [audioEnabled, setAudioEnabled] = useState(false);
-
   // Game State
   const [appMode, setAppMode] = useState('learn'); 
   const [gameConfig, setGameConfig] = useState(null); 
@@ -1266,7 +1156,7 @@ export default function HanziLearningApp() {
 
         onAuthStateChanged(auth.current, (currentUser) => {
             setUser(currentUser);
-            if (currentUser && currentUser.email && ADMIN_EMAILS.includes(currentUser.email.toLowerCase())) {
+            if (currentUser && currentUser.email && ADMIN_EMAILS.includes(currentUser.email)) {
                 setIsFirebaseAdmin(true);
             } else {
                 setIsFirebaseAdmin(false);
@@ -1313,35 +1203,13 @@ export default function HanziLearningApp() {
       if (auth.current) { await signOut(auth.current); await signInAnonymously(auth.current); } 
       setIsFirebaseAdmin(false); setIsManualAdmin(false); 
   };
-
   const handleSaveToCloud = async (charData) => {
     if (!db.current) return;
-    let docId = charData.id;
-    if (!docId) {
-        const vol = charData.volume || '0';
-        const lesson = charData.lesson || '0';
-        docId = `${charData.char}_${vol}_${lesson}`;
-    }
-    const docRef = doc(getHanziCollection(db.current), docId);
+    const docRef = doc(getHanziCollection(db.current), charData.char);
     const saveData = { ...charData, updatedAt: new Date().toISOString(), updatedBy: user?.email || 'admin' };
-    delete saveData.id; 
-    await setDoc(docRef, saveData);
+    delete saveData.id; await setDoc(docRef, saveData);
     setLastMeta({ volume: charData.volume, lesson: charData.lesson });
-    alert("保存成功！");
   };
-
-  const handleDeleteChar = async (docId) => {
-      if (!db.current || !docId) return;
-      if (!confirm("⚠️ 确定要彻底删除这个字吗？删除后无法恢复！")) return;
-      try {
-          await deleteDoc(doc(getHanziCollection(db.current), docId));
-          alert("已删除");
-          setIsModalOpen(false); setEditingChar(null); setSelectedChar(null); 
-      } catch (e) {
-          console.error(e); alert("删除失败，请检查权限");
-      }
-  };
-
   const handleBatchImport = async (dataArray) => {
       if (!db.current) return;
       const batch = writeBatch(db.current);
@@ -1349,18 +1217,13 @@ export default function HanziLearningApp() {
       let count = 0;
       dataArray.forEach(item => {
           if (!item.char) return;
-          const vol = item.volume || '0';
-          const lesson = item.lesson || '0';
-          const docId = `${item.char}_${vol}_${lesson}`;
           const saveData = { ...item, updatedAt: new Date().toISOString() };
-          delete saveData.id;
-          batch.set(doc(collRef, docId), saveData);
+          batch.set(doc(collRef, item.char), saveData);
           count++;
       });
       await batch.commit();
-      alert(`成功导入 ${count} 条数据`);
+      alert(`Success: ${count}`);
   };
-
   const handleExport = async () => {
       if (!db.current) return;
       const snapshot = await getDocs(getHanziCollection(db.current));
@@ -1369,15 +1232,14 @@ export default function HanziLearningApp() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = `hanzi_backup.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a);
   };
-
   const handleAddCustomWord = async (wordData) => {
       if (!db.current || !user) return;
       setIsCustomAdding(true);
       try { await addDoc(getUserCustomCollection(db.current, user.uid), { ...wordData, createdAt: new Date().toISOString() }); } catch(e) { alert("Save failed"); } finally { setIsCustomAdding(false); }
   };
-
   const handleDeleteCustomWord = async (id) => { if (!db.current || !user) return; await deleteDoc(doc(getUserCustomCollection(db.current, user.uid), id)); };
-  
+
+  // Game Handlers
   const handleOpenGameSettings = (type) => {
       setPendingGameType(type);
       setIsGameSettingsOpen(true);
@@ -1395,28 +1257,14 @@ export default function HanziLearningApp() {
            items = [...formattedCustom, ...items];
       }
       if (items.length === 0) { alert("没有找到内容"); return; }
+      
       setGameConfig({ type, items, contentType });
       setIsGameSettingsOpen(false);
   };
 
   const filteredData = useMemo(() => {
     if (!searchTerm) return [];
-    const lowerTerm = searchTerm.toLowerCase().trim();
-    return database.filter(item => {
-      if (item.char.includes(lowerTerm)) return true;
-      if (item.pinyin) {
-        const originalPinyin = item.pinyin.toLowerCase();
-        if (originalPinyin.includes(lowerTerm)) return true;
-        const cleanPinyin = item.pinyin.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-        if (cleanPinyin.includes(lowerTerm)) return true;
-      }
-      if (item.otherPinyins) {
-        const otherOriginal = item.otherPinyins.toLowerCase();
-        const otherClean = item.otherPinyins.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-        if (otherOriginal.includes(lowerTerm) || otherClean.includes(lowerTerm)) return true;
-      }
-      return false;
-    });
+    return database.filter(item => item.char.includes(searchTerm) || item.pinyin.toLowerCase().includes(searchTerm.toLowerCase()));
   }, [searchTerm, database]);
 
   return (
@@ -1428,62 +1276,45 @@ export default function HanziLearningApp() {
                 <BookOpen className="opacity-90" />
                 <h1 className="text-xl font-bold hidden sm:block">汉字学习宝</h1>
             </div>
-            
-            {/* [新增] 静音切换按钮 */}
-            <button 
-                onClick={() => setAudioEnabled(!audioEnabled)} 
-                className={`p-2 rounded-full transition ${audioEnabled ? 'bg-teal-600 text-white hover:bg-teal-500' : 'bg-red-500 text-white hover:bg-red-600 animate-pulse'}`}
-                title={audioEnabled ? "点击静音" : "点击开启声音"}
-            >
-                {audioEnabled ? <Volume2 size={20}/> : <VolumeX size={20}/>}
-            </button>
-
             <div className="flex bg-teal-800/50 rounded-full p-1 ml-4">
                 <button onClick={() => { setAppMode('learn'); setGameConfig(null); }} className={`px-4 py-1 rounded-full text-sm font-bold transition ${appMode === 'learn' ? 'bg-white text-teal-700 shadow' : 'text-teal-200 hover:text-white'}`}>学习模式</button>
-                <button onClick={() => { setAppMode('dictionary'); setGameConfig(null); setSelectedChar(null); }} className={`flex items-center gap-1 px-4 py-1 rounded-full text-sm font-bold transition ${appMode === 'dictionary' ? 'bg-white text-teal-700 shadow' : 'text-teal-200 hover:text-white'}`}><Library size={14}/> 字典</button>
                 <button onClick={() => setAppMode('games')} className={`px-4 py-1 rounded-full text-sm font-bold transition ${appMode === 'games' ? 'bg-white text-teal-700 shadow' : 'text-teal-200 hover:text-white'}`}>游戏练习</button>
             </div>
           </div>
           <div className="flex items-center gap-4">
-              {isAdmin ? (
-                  <div className="flex items-center gap-2">
-                      <span className={`text-xs px-2 py-1 rounded font-bold shadow-sm hidden md:block ${isManualAdmin ? 'bg-orange-500 text-white' : 'bg-amber-500 text-white'}`}>{isManualAdmin ? "演示" : "管理"}</span>
-                      <button onClick={handleExport} className="p-2 bg-teal-600 rounded-lg hover:bg-teal-500" title="导出"><Download size={16} /></button>
-                      <button onClick={() => setIsImportModalOpen(true)} className="p-2 bg-indigo-500 rounded-lg hover:bg-indigo-600" title="导入"><UploadCloud size={16} /></button>
-                      <button onClick={() => { setEditingChar(null); setIsModalOpen(true); }} className="flex items-center gap-1 bg-white text-teal-700 px-3 py-1.5 rounded-lg font-bold shadow hover:bg-teal-50 text-sm"><PlusCircle size={16} /> 录入</button>
-                      <button onClick={handleLogout} className="text-teal-200 hover:text-white p-1"><LogOut size={20}/></button>
-                  </div>
-              ) : (
-                  <div className="flex gap-2">
+             {isAdmin ? (
+                 <div className="flex items-center gap-2">
+                     <span className={`text-xs px-2 py-1 rounded font-bold shadow-sm hidden md:block ${isManualAdmin ? 'bg-orange-500 text-white' : 'bg-amber-500 text-white'}`}>{isManualAdmin ? "演示" : "管理"}</span>
+                     <button onClick={handleExport} className="p-2 bg-teal-600 rounded-lg hover:bg-teal-500" title="导出"><Download size={16} /></button>
+                     <button onClick={() => setIsImportModalOpen(true)} className="p-2 bg-indigo-500 rounded-lg hover:bg-indigo-600" title="导入"><UploadCloud size={16} /></button>
+                     <button onClick={() => { setEditingChar(null); setIsModalOpen(true); }} className="flex items-center gap-1 bg-white text-teal-700 px-3 py-1.5 rounded-lg font-bold shadow hover:bg-teal-50 text-sm"><PlusCircle size={16} /> 录入</button>
+                     <button onClick={handleLogout} className="text-teal-200 hover:text-white p-1"><LogOut size={20}/></button>
+                 </div>
+             ) : (
+                 <div className="flex gap-2">
                     {!user?.isAnonymous && <button onClick={() => setIsCustomModalOpen(true)} className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold bg-teal-800/50 text-teal-200 hover:bg-teal-800 transition"><Crown size={16} /> 我的生词</button>}
                     <button onClick={() => setIsAuthModalOpen(true)} className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold bg-teal-800/50 text-teal-200 hover:bg-teal-800 transition"><User size={16} /> 老师登录</button>
-                  </div>
-              )}
+                 </div>
+             )}
           </div>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto p-4 space-y-6">
-        {appMode === 'games' && (
-             gameConfig ? (
+        {appMode === 'games' ? (
+            gameConfig ? (
                 <div className="h-[80vh] bg-white rounded-3xl shadow-lg border border-slate-200 p-6 overflow-hidden">
-                    {/* 👇 [修改] 传递 audioEnabled 给所有游戏 */}
-                    {gameConfig.type === 'splitMatch' && <SplitWordMatchGame items={gameConfig.items} db={db.current} audioEnabled={audioEnabled} onBack={() => setGameConfig(null)} />}
-                    {gameConfig.type === 'pinyinMatch' && <PinyinMatchGame items={gameConfig.items} db={db.current} audioEnabled={audioEnabled} onBack={() => setGameConfig(null)} contentType={gameConfig.contentType} />}
-                    {gameConfig.type === 'readMatch' && <ReadMatchGame items={gameConfig.items} db={db.current} audioEnabled={audioEnabled} onBack={() => setGameConfig(null)} />}
-                    {gameConfig.type === 'flashcards' && <FlashCardGame items={gameConfig.items} db={db.current} audioEnabled={audioEnabled} onBack={() => setGameConfig(null)} contentType={gameConfig.contentType} />}
+                    {gameConfig.type === 'splitMatch' && <SplitWordMatchGame items={gameConfig.items} onBack={() => setGameConfig(null)} />}
+                    {gameConfig.type === 'pinyinMatch' && <PinyinMatchGame items={gameConfig.items} onBack={() => setGameConfig(null)} contentType={gameConfig.contentType} />}
+                    {gameConfig.type === 'readMatch' && <ReadMatchGame items={gameConfig.items} onBack={() => setGameConfig(null)} />}
+                    {gameConfig.type === 'geneMatch' && <GeneMatchGame items={gameConfig.items} onBack={() => setGameConfig(null)} contentType={gameConfig.contentType} />}
+                    {gameConfig.type === 'flashcards' && <FlashCardGame items={gameConfig.items} onBack={() => setGameConfig(null)} db={db.current} contentType={gameConfig.contentType} />}
                 </div>
             ) : <GameSelector onOpenSettings={handleOpenGameSettings} />
-        )}
-
-        {appMode === 'dictionary' && (
-            <DictionaryView database={database} onSelectChar={(char) => { setSelectedChar(char); setAppMode('learn'); }} />
-        )}
-
-        {appMode === 'learn' && (
+        ) : (
             <>
                 <div className="relative group z-40">
-                    <input type="text" placeholder="🔍 搜索生字..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onFocus={() => setShowList(true)} onKeyDown={(e) => { if (e.key === 'Enter' && filteredData.length > 0) { setSelectedChar(filteredData[0]); setSearchTerm(""); setShowList(false); } }} className="w-full pl-12 pr-4 py-4 rounded-2xl border-2 border-slate-200 focus:border-teal-500 focus:ring-4 focus:ring-teal-100 transition shadow-sm text-lg outline-none" />
+                    <input type="text" placeholder="🔍 搜索生字..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onFocus={() => setShowList(true)} className="w-full pl-12 pr-4 py-4 rounded-2xl border-2 border-slate-200 focus:border-teal-500 focus:ring-4 focus:ring-teal-100 transition shadow-sm text-lg outline-none" />
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
                     {showList && searchTerm && (
                         <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-gray-100 max-h-80 overflow-y-auto z-50">
@@ -1498,7 +1329,7 @@ export default function HanziLearningApp() {
                 </div>
                 {selectedChar ? (
                     <div className="grid lg:grid-cols-12 gap-6 animate-in slide-in-from-bottom-4 duration-500">
-                         <div className="lg:col-span-5">
+                        <div className="lg:col-span-5">
                             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex flex-col items-center sticky top-24">
                                 <div className="w-full flex justify-between items-center mb-6">
                                     <h2 className="font-bold text-teal-800 flex items-center gap-2"><PenTool size={18} className="text-teal-600" /> 智能描红</h2>
@@ -1506,61 +1337,76 @@ export default function HanziLearningApp() {
                                 </div>
                                 <HanziWriterBoard char={selectedChar.char} />
                             </div>
-                         </div>
-                         <div className="lg:col-span-7 flex flex-col gap-6">
-                            <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200 relative group">
-                                {isAdmin && ( <div className="absolute top-4 right-4 flex gap-2 z-50"><button onClick={() => { setEditingChar(selectedChar); setIsModalOpen(true); }} className="p-3 bg-blue-100 text-blue-600 rounded-full hover:bg-blue-200 shadow-sm transition-colors"><Edit3 size={20}/></button></div> )}
+                        </div>
+                        <div className="lg:col-span-7 flex flex-col gap-6">
+                            <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden group">
+                                {isAdmin && ( <div className="absolute top-4 right-4 flex gap-2 z-20"><button onClick={() => { setEditingChar(selectedChar); setIsModalOpen(true); }} className="p-2 bg-blue-100 text-blue-600 rounded-full hover:bg-blue-200 shadow-sm"><Edit3 size={18}/></button></div> )}
                                 <div className="relative z-10 flex gap-6">
-                                    {/* [修改] 传递 audioEnabled */}
-                                    <div onClick={() => speak(selectedChar.char, audioEnabled)} className="w-28 h-28 bg-teal-600 rounded-2xl flex items-center justify-center text-white text-7xl font-serif shadow-xl shadow-teal-100 cursor-pointer hover:scale-105 transition">{selectedChar.char}</div>
+                                    <div onClick={() => speak(selectedChar.char)} className="w-28 h-28 bg-teal-600 rounded-2xl flex items-center justify-center text-white text-7xl font-serif shadow-xl shadow-teal-100 cursor-pointer hover:scale-105 transition">{selectedChar.char}</div>
                                     <div>
-                                        <div className="flex flex-col gap-1 mb-3">
-                                            {/* [修改] 传递 audioEnabled */}
-                                            <div className="flex items-baseline gap-3"><h1 className="text-5xl font-bold text-slate-800">{selectedChar.pinyin}</h1><Volume2 onClick={() => speak(selectedChar.char, audioEnabled)} className="text-teal-500 cursor-pointer hover:text-teal-600" size={28} /></div>
-                                            {selectedChar.otherPinyins && (<div className="flex items-center gap-2 text-slate-400 font-medium"><span className="text-xs bg-slate-100 px-1.5 py-0.5 rounded">多音</span><span>{selectedChar.otherPinyins}</span></div>)}
-                                        </div>
+                                        <div className="flex items-baseline gap-3"><h1 className="text-5xl font-bold text-slate-800">{selectedChar.pinyin}</h1><Volume2 onClick={() => speak(selectedChar.char)} className="text-teal-500 cursor-pointer hover:text-teal-600" size={28} /></div>
                                         <p className="text-lg text-slate-500 mt-1 mb-4">{selectedChar.definition || "暂无释义"}</p>
                                         <div className="flex flex-wrap gap-2">
-                                            <span className="badge flex items-center gap-1 bg-slate-100 px-2 py-1 rounded text-sm text-slate-600 border border-slate-200" title="结构"><Layers size={14}/> {selectedChar.structure || "未知结构"}</span>
-                                            <span className="badge flex items-center gap-1 bg-slate-100 px-2 py-1 rounded text-sm text-slate-600 border border-slate-200" title="部首"><Type size={14}/> {selectedChar.radical || "无部首"}</span>
-                                            {selectedChar.strokes && (<span className="badge flex items-center gap-1 bg-slate-100 px-2 py-1 rounded text-sm text-slate-600 border border-slate-200" title="笔画数"><PenTool size={14}/> {selectedChar.strokes} 画</span>)}
+                                            <span className="badge flex items-center gap-1 bg-slate-100 px-2 py-1 rounded text-sm text-slate-600 border border-slate-200"><Layers size={14}/> {selectedChar.structure}</span>
+                                            <span className="badge flex items-center gap-1 bg-slate-100 px-2 py-1 rounded text-sm text-slate-600 border border-slate-200"><Type size={14}/> {selectedChar.radical}</span>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                             
+                            {/* [改进] 通栏卡片式布局：上词下句 */}
                             <div className="bg-white rounded-3xl shadow-sm border border-slate-200 flex-1 overflow-hidden">
                                 <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-                                    <h3 className="font-bold text-slate-700 flex items-center gap-2"><RefreshCcw className="text-amber-500" size={18}/> 扩展学习</h3>
+                                    <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                                        <RefreshCcw className="text-amber-500" size={18}/> 扩展学习
+                                    </h3>
                                 </div>
                                 <div className="p-6 space-y-4">
                                     {selectedChar.words && selectedChar.words.length > 0 ? (
                                         selectedChar.words.map((w, i) => {
                                             const sentence = selectedChar.sentences && selectedChar.sentences[i] ? selectedChar.sentences[i] : "暂无例句";
-                                            const wordMeaning = selectedChar.wordMeanings && selectedChar.wordMeanings[i] ? selectedChar.wordMeanings[i] : "";
                                             return (
                                                 <div key={i} className="group border border-slate-200 rounded-2xl overflow-hidden hover:shadow-lg hover:border-teal-200 transition-all duration-300 bg-white">
-                                                    {/* [修改] 传递 audioEnabled */}
-                                                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center cursor-pointer group-hover:bg-teal-50/50 transition-colors" onClick={() => speak(w, audioEnabled)}>
-                                                        <div className="flex flex-col gap-1">
-                                                            <div className="flex items-center gap-3"><span className="bg-teal-600 text-white text-xs font-bold px-2 py-0.5 rounded">词语</span><span className="text-xl font-bold text-slate-800 tracking-wide">{w}</span></div>
-                                                            {wordMeaning && (<span className="text-sm text-slate-400 font-medium pl-14 italic">{wordMeaning}</span>)}
+                                                    {/* 上部分：词语 */}
+                                                    <div 
+                                                        className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center cursor-pointer group-hover:bg-teal-50/50 transition-colors" 
+                                                        onClick={() => speak(w)}
+                                                    >
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="bg-teal-600 text-white text-xs font-bold px-2 py-0.5 rounded">词语</span>
+                                                            <span className="text-xl font-bold text-slate-800 tracking-wide">{w}</span>
                                                         </div>
-                                                        <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-teal-500 hover:bg-teal-500 hover:text-white transition shadow-sm"><Volume2 size={16} /></div>
+                                                        <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-teal-500 hover:bg-teal-500 hover:text-white transition shadow-sm">
+                                                            <Volume2 size={16} />
+                                                        </div>
                                                     </div>
-                                                    {/* [修改] 传递 audioEnabled */}
-                                                    <div className="p-5 cursor-pointer relative" onClick={() => speak(sentence, audioEnabled)}>
-                                                        <div className="absolute top-5 left-5 text-gray-300 select-none"><span className="text-4xl leading-none">“</span></div>
-                                                        <p className="text-slate-600 leading-relaxed text-base pl-8 pr-2 pt-1 font-medium">{sentence}</p>
-                                                        <div className="mt-2 pl-8 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity"><span className="text-xs text-teal-500 font-bold flex items-center gap-1"><Volume2 size={12}/> 点击朗读例句</span></div>
+                                                    {/* 下部分：例句 */}
+                                                    <div 
+                                                        className="p-5 cursor-pointer relative" 
+                                                        onClick={() => speak(sentence)}
+                                                    >
+                                                        <div className="absolute top-5 left-5 text-gray-300 select-none">
+                                                            <span className="text-4xl leading-none">“</span>
+                                                        </div>
+                                                        <p className="text-slate-600 leading-relaxed text-base pl-8 pr-2 pt-1 font-medium">
+                                                            {sentence}
+                                                        </p>
+                                                        <div className="mt-2 pl-8 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <span className="text-xs text-teal-500 font-bold flex items-center gap-1"><Volume2 size={12}/> 点击朗读例句</span>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             )
                                         })
-                                    ) : <div className="text-center text-gray-400 py-12 flex flex-col items-center gap-2"><BookOpen size={32} className="opacity-20"/><span>暂无扩展内容</span></div>}
+                                    ) : ( 
+                                        <div className="text-center text-gray-400 py-12 flex flex-col items-center gap-2">
+                                            <BookOpen size={32} className="opacity-20"/>
+                                            <span>暂无扩展内容</span>
+                                        </div> 
+                                    )}
                                 </div>
                             </div>
-                         </div>
+                        </div>
                     </div>
                 ) : (
                     <div className="flex flex-col items-center justify-center h-96 text-gray-400 gap-4">
@@ -1571,13 +1417,21 @@ export default function HanziLearningApp() {
             </>
         )}
 
-        <AdminCharacterForm isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSaveToCloud} onDelete={handleDeleteChar} database={database} initialData={editingChar} lastMeta={lastMeta} />
+        <AdminCharacterForm isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSaveToCloud} database={database} initialData={editingChar} lastMeta={lastMeta} />
         <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} onLogin={handleLogin} isProcessing={isProcessingAuth} />
         <CustomWordsModal isOpen={isCustomModalOpen} onClose={() => setIsCustomModalOpen(false)} customWords={customWords} onAdd={handleAddCustomWord} onDelete={handleDeleteCustomWord} isAdding={isCustomAdding} />
         <ImportJsonModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onImport={handleBatchImport} />
-        <GameSettingsModal isOpen={isGameSettingsOpen} onClose={() => setIsGameSettingsOpen(false)} onStart={handleStartGame} database={database} userRole={user ? (ADMIN_EMAILS.includes(user.email) ? 'admin' : 'member') : 'visitor'} hasCustomWords={customWords.length > 0} gameType={pendingGameType} />
+        <GameSettingsModal 
+            isOpen={isGameSettingsOpen} 
+            onClose={() => setIsGameSettingsOpen(false)} 
+            onStart={handleStartGame} 
+            database={database} 
+            userRole={user ? (ADMIN_EMAILS.includes(user.email) ? 'admin' : 'member') : 'visitor'} 
+            hasCustomWords={customWords.length > 0} 
+            gameType={pendingGameType} 
+        />
         
-        <div className="text-center text-slate-400 text-sm py-6">© 2026 汉字学习宝 • Chinese Learning & Games Winnie</div>
+        <div className="text-center text-slate-400 text-sm py-6">© 2023 汉字学习宝 • Learning & Games v2.6</div>
       </main>
     </div>
   );
