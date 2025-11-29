@@ -1,647 +1,73 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Search, BookOpen, PenTool, Edit3, Settings, Cloud, Loader2, X, ChevronRight, PlusCircle, Save, Play, ChevronDown, RefreshCcw, Database, UploadCloud, Volume2, Wifi, WifiOff, AlertCircle } from 'lucide-react';
+import { 
+  Search, Volume2, VolumeX, BookOpen, Layers, Type, RefreshCcw, 
+  ChevronRight, PlusCircle, Save, Play, PenTool, Edit3, Trash2, 
+  User, LogOut, Cloud, Loader2, UploadCloud, CheckCircle2, XCircle, 
+  FileJson, Download, Gamepad2, Trophy, Crown, HelpCircle, RefreshCw, Star,
+  Lock, Key, Mic, Activity, Settings, ThumbsUp, ThumbsDown, Eye, EyeOff
+} from 'lucide-react';
 
-// ----------------------------------------------------------------------
-// 🔧 VS Code 本地开发：请【取消】下面这一行的注释
-// ----------------------------------------------------------------------
-import HanziWriter from 'hanzi-writer'; 
-
-// 引入 Firebase
-import { db } from './firebase';
-import { collection, doc, setDoc, onSnapshot, query, orderBy, writeBatch } from 'firebase/firestore';
-
-// ==========================================
-// 1. 完整原始数据源
-// ==========================================
-const RAW_DATA_SOURCE = `
-爱	ài	7	1
-吧	ba	10	2
-帮	bāng	12	2
-包	bāo	5	2
-宝	bǎo	7	2
-本	běn	2	2
-笔	bǐ	2	2
-别	bié	6	2
-不	bù	2	2
-长	cháng	11	2
-唱	chàng	5	2
-从	cóng	11	2
-蛋	dàn	5	2
-地	dì	8	2
-得	de	7	2
-点	diǎn	12	2
-动	dòng	9	2
-都	dōu	8	2
-读	dú	1	2
-对	duì	4	2
-饿	è	6	2
-发	fā	10	2
-房	fáng	6	2
-放	fàng	3	2
-飞	fēi	9	2
-告	gào	3	2
-哥	gē	1	2
-给	gěi	5	2
-跟	gēn	8	2
-工	gōng	—	2
-公	gōng	—	2
-古	gǔ	—	2
-瓜	guā	—	2
-关	guān	—	2
-光	guāng	9	2
-国	guó	11	2
-果	guǒ	5	2
-还	hái	6	2
-孩	hái	4	2
-海	hǎi	12	2
-汉	hàn	1	2
-河	hé	9	2
-很	hěn	8	2
-湖	hú	9	2
-华	huá	11	2
-画	huà	1	2
-欢	huān	1	2
-会	huì	6	2
-活	huó	12	2
-记	jì	4	2
-假	jiǎ	12	2
-间	jiān	6	2
-件	jiàn	7	2
-江	jiāng	—	2
-讲	jiǎng	2	2
-教	jiāo	1	2
-教	jiào	2	2
-姐	jiě	—	2
-今	jīn	3	2
-具	jù	—	2
-觉	jué	—	2
-卡	kǎ	5	2
-考	kǎo	7	2
-可	kě	6	2
-快	kuài	12	2
-乐	lè	12	2
-里	lǐ	2	2
-两	liǎng	7	2
-亮	liàng	8	2
-流	liú	9	2
-旅	lǚ	12	2
-吗	ma	2	2
-买	mǎi	5	2
-么	me	8	2
-没	méi	4	2
-苗	miáo	10	2
-名	míng	11	2
-明	míng	—	2
-母	mǔ	11	2
-哪	nǎ	8	2
-那	nà	2	2
-脑	nǎo	7	2
-期	qī	3	2
-起	qǐ	4	2
-亲	qīn	11	2
-请	qǐng	4	2
-谁	shuí	3	2
-什	shén	8	2
-时	shí	9	2
-拾	shí	6	2
-事	shì	6	2
-室	shì	2	2
-收	shōu	6	2
-书	shū	2	2
-树	shù	10	2
-双	shuāng	7	2
-思	sī	7	2
-诉	sù	3	2
-岁	suì	5	2
-它	tā	11	2
-她	tā	2	2
-条	tiáo	11	2
-听	tīng	3	2
-玩	wán	5	2
-万	wàn	7	2
-为	wéi	8	2
-问	wèn	3	2
-午	wǔ	3	2
-务	wù	12	2
-物	wù	12	2
-洗	xǐ	6	2
-喜	xǐ	1	2
-系	xì	4	2
-想	xiǎng	9	2
-写	xiě	1	2
-谢	xiè	4	2
-心	xīn	3	2
-星	xīng	3	2
-芽	yá	10	2
-洋	yáng	12	2
-要	yào	10	2
-也	yě	8	2
-夜	yè	9	2
-以	yǐ	12	2
-泳	yǒng	2	2
-用	yòng	4	2
-游	yóu	9	2
-友	yǒu	3	2
-又	yòu	7	2
-语	yǔ	1	2
-远	yuǎn	8	2
-在	zài	1	2
-再	zài	4	2
-张	zhāng	5	2
-长	zhǎng	9	2
-着	zhe	11	2
-种	zhǒng	10	2
-种	zhòng	10	2
-子	zǐ	2	2
-字	zì	1	2
-最	zuì	11	2
-昨	zuó	5	2
-作	zuò	7	2
-做	zuò	4	2
-爱	ài	7	1
-八	bā	1	1
-爸	bà	9	1
-白	bái	6	1
-百	bǎi	1	1
-北	běi	11	1
-草	cǎo	6	1
-车	chē	8	1
-虫	chóng	6	1
-出	chū	4	1
-穿	chuān	12	1
-春	chūn	5	1
-大	dà	2	1
-戴	dài	12	1
-到	dào	12	1
-的	de	9	1
-地	dì	5	1
-电	diàn	5	1
-东	dōng	11	1
-冬	dōng	5	1
-多	duō	2	1
-儿	ér	10	1
-耳	ěr	2	1
-二	èr	1	1
-方	fāng	11	1
-风	fēng	—	1
-高	gāo	8	1
-个	gè	10	1
-好	hǎo	8	1
-禾	hé	3	1
-和	hé	9	1
-黑	hēi	6	1
-红	hóng	6	1
-后	hòu	—	1
-花	huā	10	1
-黄	huáng	6	1
-火	huǒ	3	1
-季	jì	10	1
-家	jiā	9	1
-见	jiàn	8	1
-九	jiǔ	1	1
-开	kāi	8	1
-看	kàn	10	1
-口	kǒu	2	1
-来	lái	4	1
-蓝	lán	6	1
-老	lǎo	7	1
-了	le	8	1
-立	lì	4	1
-六	liù	1	1
-绿	lǜ	6	1
-妈	mā	9	1
-马	mǎ	6	1
-帽	mào	12	1
-门	mén	10	1
-们	men	8	1
-面	miàn	11	1
-木	mù	3	1
-目	mù	2	1
-奶	nǎi	9	1
-南	nán	11	1
-闹	nào	12	1
-你	nǐ	8	1
-年	nián	10	1
-鸟	niǎo	6	1
-牛	niú	6	1
-七	qī	1	1
-前	qián	10	1
-秋	qiū	5	1
-去	qù	4	1
-热	rè	12	1
-人	rén	2	1
-认	rèn	11	1
-日	rì	3	1
-入	rù	4	1
-三	sān	1	1
-山	shān	3	1
-上	shàng	4	1
-少	shǎo	2	1
-身	shēn	12	1
-生	shēng	7	1
-师	shī	7	1
-十	shí	1	1
-石	shí	3	1
-说	shuō	8	1
-四	sì	1	1
-是	shì	7	1
-手	shǒu	2	1
-水	shuǐ	3	1
-他	tā	10	1
-太	tài	11	1
-体	tǐ	12	1
-天	tiān	5	1
-田	tián	3	1
-同	tóng	7	1
-头	tóu	2	1
-土	tǔ	3	1
-外	wài	10	1
-文	wén	7	1
-我	wǒ	7	1
-五	wǔ	1	1
-西	xī	11	1
-习	xí	12	1
-下	xià	4	1
-夏	xià	5	1
-向	xiàng	11	1
-校	xiào	7	1
-新	xīn	12	1
-兴	xìng	8	1
-学	xué	7	1
-雪	xuě	5	1
-羊	yáng	6	1
-爷	yé	9	1
-一	yī	1	1
-衣	yī	12	1
-有	yǒu	9	1
-右	yòu	4	1
-鱼	yú	6	1
-雨	yǔ	5	1
-园	yuán	10	1
-月	yuè	2	1
-云	yún	5	1
-早	zǎo	8	1
-这	zhè	9	1
-真	zhēn	8	1
-中	zhōng	4	1
-祝	zhù	12	1
-走	zǒu	4	1
-足	zú	2	1
-左	zuǒ	4	1
-坐	zuò	4	1
-把	bǎ	9	3
-报	bào	2	3
-被	bèi	12	3
-鼻	bí	4	3
-边	biān	4	3
-变	biàn	5	3
-便	biàn	9	3
-病	bìng	3	3
-布	bù	9	3
-步	bù	10	3
-猜	cāi	4	3
-采	cǎi	4	3
-层	céng	7	3
-尝	cháng	6	3
-常	cháng	8	3
-成	chéng	5	3
-吃	chī	2	3
-冲	chōng	8	3
-传	chuán	4	3
-床	chuáng	7	3
-打	dǎ	9	3
-代	dài	9	3
-带	dài	3	3
-道	dào	1	3
-得	dé	10	3
-灯	dēng	1	3
-等	děng	2	3
-低	dī	7	3
-弟	dì	1	3
-第	dì	10	3
-店	diàn	2	3
-钓	diào	11	3
-掉	diào	5	3
-动	dòng	4	3
-朵	duǒ	4	3
-饭	fàn	2	3
-粉	fěn	4	3
-付	fù	2	3
-盖	gài	8	3
-干	gān	9	3
-感	gǎn	3	3
-干	gàn	12	3
-根	gēn	12	3
-更	gèng	7	3
-狗	gǒu	6	3
-故	gù	2	3
-怪	guài	8	3
-龟	guī	10	3
-过	guò	6	3
-喊	hǎn	12	3
-候	hòu	5	3
-壶	hú	8	3
-护	hù	3	3
-话	huà	2	3
-谎	huǎng	12	3
-回	huí	10	3
-机	jī	8	3
-几	jǐ	11	3
-已	yǐ	6	3
-交	jiāo	1	3
-觉	jué	5	3
-街	jiē	1	3
-结	jié	11	3
-经	jīng	11	3
-晴	qíng	4	3
-静	jìng	7	3
-就	jiù	3	3
-举	jǔ	7	3
-决	jué	9	3
-科	kē	8	3
-刻	kè	12	3
-课	kè	2	3
-宽	kuān	1	3
-拉	lā	1	3
-狠	hěn	12	3
-劳	láo	4	3
-冷	lěng	5	3
-理	lǐ	2	3
-凉	liáng	6	3
-量	liàng	3	3
-楼	lóu	7	3
-满	mǎn	6	3
-慢	màn	10	3
-忙	máng	1	3
-猫	māo	6	3
-冒	mào	3	3
-妹	mèi	1	3
-蜜	mì	4	3
-拿	ná	2	3
-呢	ne	2	3
-能	néng	1	3
-弄	nòng	12	3
-爬	pá	10	3
-跑	pǎo	5	3
-皮	pí	9	3
-片	piàn	9	3
-骗	piàn	12	3
-飘	piāo	5	3
-破	pò	9	3
-欺	qī	12	3
-气	qì	8	3
-汽	qì	5	3
-千	qiān	7	3
-钱	qián	2	3
-然	rán	10	3
-让	ràng	8	3
-仍	réng	10	3
-撒	sā	12	3
-烧	shāo	3	3
-声	shēng	12	3
-诗	shī	7	3
-士	shì	3	3
-赛	sài	10	3
-试	shì	8	3
-首	shǒu	7	3
-睡	shuì	5	3
-糖	táng	6	3
-甜	tián	6	3
-跳	tiào	5	3
-停	tíng	1	3
-通	tōng	1	3
-童	tóng	2	3
-兔	tù	6	3
-往	wǎng	1	3
-望	wàng	7	3
-位	wèi	8	3
-温	wēn	3	3
-乌	wū	10	3
-咸	xián	6	3
-现	xiàn	2	3
-乡	xiāng	7	3
-笑	xiào	11	3
-盐	yán	6	3
-眼	yǎn	4	3
-药	yào	3	3
-验	yàn	8	3
-医	yī	3	3
-疑	yí	7	3
-已	yǐ	11	3
-意	yì	10	3
-英	yīng	8	3
-院	yuàn	3	3
-元	yuán	9	3
-造	zào	9	3
-怎	zěn	11	3
-针	zhēn	3	3
-争	zhēng	6	3
-之	zhī	9	3
-只	zhǐ	4	3
-知	zhī	5	3
-追	zhuī	10	3
-捉	zhuō	11	3
-自	zì	6	3
-嘴	zuǐ	4	3
-纸	zhǐ	9	3
-珠	zhū	5	3
-竹	zhú	9	3
-专	zhuān	11	3
-啊	a	2	4
-安	ān	1	4
-岸	àn	2	4
-搬	bān	11	4
-办	bàn	5	4
-冰	bīng	11	4
-伯	bó	5	4
-才	cái	4	4
-餐	cān	7	4
-察	chá	11	4
-场	chǎng	1	4
-城	chéng	1	4
-处	chù	4	4
-船	chuán	10	4
-串	chuàn	10	4
-窗	chuāng	3	4
-次	cì	12	4
-聪	cōng	8	4
-达	dá	12	4
-答	dá	10	4
-当	dāng	7	4
-岛	dǎo	2	4
-登	dēng	2	4
-滴	dī	7	4
-定	dìng	5	4
-懂	dǒng	11	4
-法	fǎ	8	4
-非	fēi	1	4
-分	fēn	2	4
-封	fēng	1	4
-服	fú	4	4
-富	fù	1	4
-该	gāi	5	4
-刚	gāng	6	4
-缸	gāng	8	4
-宫	gōng	3	4
-挂	guà	6	4
-观	guān	11	4
-广	guǎng	1	4
-汗	hàn	7	4
-航	háng	12	4
-号	hào	1	4
-喝	hē	5	4
-化	huà	11	4
-慌	huāng	8	4
-既	jì	5	4
-尖	jiān	10	4
-健	jiàn	4	4
-箭	jiàn	10	4
-皆	jiē	7	4
-接	jiē	6	4
-界	jiè	12	4
-进	jìn	1	4
-劲	jìn	8	4
-京	jīng	1	4
-惊	jīng	8	4
-景	jǐng	2	4
-镜	jìng	3	4
-久	jiǔ	9	4
-救	jiù	8	4
-康	kāng	4	4
-靠	kào	9	4
-颗	kē	9	4
-空	kōng	9	4
-哭	kū	8	4
-苦	kǔ	7	4
-块	kuài	8	4
-啦	lā	6	4
-捞	lāo	6	4
-类	lèi	12	4
-离	lí	9	4
-力	lì	9	4
-丽	lì	2	4
-粒	lì	7	4
-连	lián	9	4
-林	lín	3	4
-落	luò	7	4
-毛	máo	10	4
-美	měi	2	4
-梦	mèng	12	4
-迷	mí	3	4
-眠	mián	7	4
-妙	miào	11	4
-泥	ní	12	4
-农	nóng	7	4
-努	nǔ	9	4
-暖	nuǎn	4	4
-盘	pán	7	4
-碰	pèng	6	4
-票	piào	1	4
-平	píng	—	4
-苹	píng	10	4
-葡	pú	10	4
-浅	qiǎn	5	4
-桥	qiáo	2	4
-清	qīng	9	4
-晴	qíng	11	4
-球	qiú	12	4
-取	qǔ	1	4
-趣	qù	3	4
-全	quán	1	4
-群	qún	6	4
-如	rú	3	4
-伞	sǎn	11	4
-色	sè	2	4
-晒	shài	4	4
-勺	sháo	9	4
-伸	shēn	6	4
-深	shēn	5	4
-狮	shī	2	4
-实	shí	12	4
-使	shǐ	8	4
-世	shì	12	4
-熟	shú	4	4
-数	shù	9	4
-孙	sūn	1	4
-抬	tái	6	4
-萄	táo	10	4
-提	tí	1	4
-啼	tí	7	4
-厅	tīng	3	4
-突	tù	5	4
-弯	wān	10	4
-完	wán	2	4
-晚	wǎn	6	4
-王	wáng	3	4
-闻	wén	7	4
-握	wò	10	4
-戏	xì	8	4
-细	xì	11	4
-吓	xià	8	4
-香	xiāng	3	4
-像	xiàng	5	4
-晓	xiǎo	7	4
-些	xiē	3	4
-辛	xīn	7	4
-信	xìn	1	4
-寻	xún	4	4
-言	yán	11	4
-沿	yán	2	4
-仰	yǎng	9	4
-样	yàng	3	4
-叶	yè	11	4
-影	yǐng	3	4
-映	yìng	3	4
-邮	yóu	1	4
-于	yú	6	4
-宇	yǔ	12	4
-员	yuán	12	4
-原	yuán	5	4
-圆	yuán	10	4
-砸	zá	8	4
-照	zhào	4	4
-正	zhèng	5	4
-直	zhí	6	4
-柱	zhù	2	4
-著	zhù	9	4
-装	zhuāng	8	4
-座	zuò	2	4
-`;
+// === Firebase Imports ===
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, signInWithPopup, GoogleAuthProvider, signOut, 
+  onAuthStateChanged, signInAnonymously, signInWithCustomToken 
+} from 'firebase/auth';
+import { 
+  getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, writeBatch, getDocs, addDoc 
+} from 'firebase/firestore';
 
 // ==========================================
-// 2. 富媒体数据扩充 (Rich Data)
+// 0. Firebase 配置
 // ==========================================
+const YOUR_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyA5q760qD5nN4Jp8i70z4sudY7HBIEMrC4",
+  authDomain: "hanzi-a1d84.firebaseapp.com",
+  projectId: "hanzi-a1d84",
+  storageBucket: "hanzi-a1d84.firebasestorage.app",
+  messagingSenderId: "1056302111936",
+  appId: "1:1056302111936:web:ac465b6ab5279703b8a125",
+  measurementId: "G-D5TDVD9727"
+};
+
+const ADMIN_EMAILS = [
+  "qiutingxiong@gmail.com",
+  "ingrid.wangying@gmail.com",
+  "xiongqiuting@gmail.com"
+];
+
+// ==========================================
+// 1. 静态数据与工具函数
+// ==========================================
+const METADATA_DB = {
+  "爱":"上下结构|爪|10", "吧":"左右结构|口|7", "帮":"上下结构|巾|9", "包":"半包围结构|勹|5", "宝":"上下结构|宀|8",
+  "本":"独体字|木|5", "笔":"上下结构|竹|10", "别":"左右结构|刂|7", "不":"独体字|一|4", "长":"独体字|长|4",
+  "国":"全包围结构|囗|8", "梦":"上下结构|木|11", "谢":"左中右结构|讠|12"
+};
+
 const RICH_DATA_MAP = new Map([
-  // === 重点修复：梦 ===
-  ["梦", { 
-    definition: "Dream", 
-    structure: "上下结构", 
-    radical: "木 (或夕)", 
-    strokes: 11, 
-    words: [
-      "做梦 (Dreaming)", 
-      "梦想 (Dream/Ambition)", 
-      "美梦 (Sweet dream)",
-      "梦见 (To dream of)"
-    ], 
-    sentences: [
-      "我昨天做了一个美梦。", 
-      "我的梦想是当一名宇航员。", 
-      "小猫在梦里吃到了大鱼。"
-    ] 
-  }],
-
-  // === 常用字优化 ===
-  ["爱", { definition: "Love", structure: "上下", radical: "爪", strokes: 10, words: ["爱好 (Hobby)", "可爱 (Cute)", "爱人 (Lover)"], sentences: ["我爱我的家。", "你喜欢什么爱好？", "这个宝宝很可爱。"] }],
-  ["谢", { definition: "Thank", structure: "左中右", radical: "讠", strokes: 12, words: ["谢谢 (Thanks)", "感谢 (Grateful)", "多谢 (Many thanks)"], sentences: ["谢谢你的帮助。", "我们要学会感谢父母。", "如果不小心做错了，要说对不起。"] }],
-  ["游", { definition: "Swim/Tour", structure: "左右", radical: "氵", strokes: 12, words: ["游泳 (Swim)", "游戏 (Game)", "旅游 (Travel)"], sentences: ["我们要去海边游泳。", "这个电脑游戏很好玩。", "暑假我想去北京旅游。"] }],
-  ["雪", { definition: "Snow", structure: "上下", radical: "雨", strokes: 11, words: ["下雪 (Snowing)", "雪花 (Snowflake)", "雪人 (Snowman)"], sentences: ["外面下雪了，好冷啊。", "我们一起去堆雪人吧！", "雪花是白色的。"] }],
+  ["梦", { words: ["梦想", "做梦", "美梦"], sentences: ["我的梦想是当一名宇航员。", "昨天晚上我做了一个美梦。"] }],
+  ["爱", { words: ["爱好", "可爱", "爱人"], sentences: ["我爱我的家。", "你喜欢什么爱好？"] }],
 ]);
 
-// ==========================================
-// 语音合成工具函数
-// ==========================================
-const speak = (text) => {
+const STRUCTURE_OPTIONS = ["独体字", "左右结构", "上下结构", "左中右结构", "上中下结构", "全包围结构", "半包围结构", "品字形结构"];
+
+const sanitizeWords = (wordsData) => {
+    if (!wordsData) return [];
+    if (Array.isArray(wordsData)) return wordsData;
+    if (typeof wordsData === 'string') return wordsData.split('\n').filter(w => w.trim());
+    return [];
+};
+
+// [修改] 更严格的标准化函数，移除所有标点符号和空格，只保留汉字、字母和数字
+const normalizeText = (text) => {
+  if (!text) return '';
+  // 匹配所有非汉字、非字母、非数字的字符并将它们替换为空
+  return text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, "").toLowerCase();
+};
+
+const speak = (text, enabled = true) => {
+  if (!enabled) return;
   if ('speechSynthesis' in window) {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
@@ -651,683 +77,1361 @@ const speak = (text) => {
   }
 };
 
-// ==========================================
-// 设置组件
-// ==========================================
-const SettingsModal = ({ isOpen, onClose, onSave, onSync, isSyncing, isConnected }) => {
-  const [appId, setAppId] = useState('');
-  const [appSecret, setAppSecret] = useState('');
+const lookupCharData = (char) => {
+    let result = { pinyin: '', lesson: '', volume: '', structure: '独体字', radical: '', strokes: '', words: '', sentences: '' };
+    const meta = METADATA_DB[char];
+    if (meta) {
+        const mp = meta.split('|');
+        result.structure = mp[0] || '独体字'; result.radical = mp[1] || ''; result.strokes = mp[2] || '';
+    }
+    const rich = RICH_DATA_MAP.get(char);
+    if (rich) {
+        result.words = rich.words.join('\n');
+        result.sentences = rich.sentences.join('\n');
+    }
+    return result;
+};
 
-  useEffect(() => {
-    const savedAppId = localStorage.getItem('mxnzp_app_id') || 'yht8jotxk8qllhot';
-    const savedAppSecret = localStorage.getItem('mxnzp_app_secret') || 'A0WaDQ9lfGnPTA9eqHFE45ZR9LY3B4uQ';
-    setAppId(savedAppId);
-    setAppSecret(savedAppSecret);
-  }, [isOpen]);
+// Firestore Helpers
+const getAppId = () => typeof __app_id !== 'undefined' ? __app_id : null;
 
-  if (!isOpen) return null;
+// [修改] 根据要求使用特定的集合路径逻辑
+const getHanziCollection = (db) => {
+    const isPreview = typeof __app_id !== 'undefined' && __app_id;
+    if (isPreview) {
+        return collection(db, 'artifacts', __app_id, 'public', 'data', 'characters');
+    } else {
+        return collection(db, 'characters');
+    }
+};
 
-  return (
-    <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6 transform transition-all relative">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-            <Settings size={20} className="text-teal-600"/>
-            系统设置
-          </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X size={24} />
-          </button>
-        </div>
-        
-        <div className="space-y-6">
-            {/* 状态显示 */}
-            <div className={`p-3 rounded-lg border text-sm flex items-center gap-2 ${isConnected ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
-                {isConnected ? <Wifi size={18}/> : <WifiOff size={18}/>}
-                {isConnected ? "已连接到 Firebase 云端数据库" : "未连接数据库，请检查配置或权限"}
-            </div>
+const getLeaderboardCollection = (db) => {
+    const isPreview = typeof __app_id !== 'undefined' && __app_id;
+    if (isPreview) {
+        return collection(db, 'artifacts', __app_id, 'public', 'data', 'leaderboards');
+    } else {
+        return collection(db, 'leaderboards');
+    }
+};
 
-          {/* 数据库同步 */}
-          <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
-            <h4 className="font-bold text-indigo-800 flex items-center gap-2 mb-2">
-                <Database size={18} />
-                一键上传数据
-            </h4>
-            <p className="text-xs text-indigo-600 mb-3">
-                将本地的原始生字表 (RAW_DATA) 初始化到云端数据库。如果数据库为空，请务必执行此操作。
-            </p>
-            <button 
-                onClick={onSync}
-                disabled={isSyncing || !isConnected}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-lg flex items-center justify-center gap-2 transition disabled:opacity-50"
-            >
-                {isSyncing ? <Loader2 className="animate-spin" /> : <UploadCloud size={18} />}
-                {isSyncing ? "正在上传数据..." : "立即上传 / 同步"}
-            </button>
-          </div>
-
-          {/* API 设置 */}
-          <div className="border-t pt-4">
-            <h4 className="font-bold text-gray-700 mb-3 flex items-center gap-2">
-                <Cloud size={18} />
-                MXNZP API 配置 (可选)
-            </h4>
-            <div className="space-y-3">
-                <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">App ID</label>
-                    <input 
-                    type="text" 
-                    className="w-full p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none font-mono text-sm"
-                    value={appId}
-                    onChange={(e) => setAppId(e.target.value)}
-                    />
-                </div>
-                <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">App Secret</label>
-                    <input 
-                    type="text" 
-                    className="w-full p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none font-mono text-sm"
-                    value={appSecret}
-                    onChange={(e) => setAppSecret(e.target.value)}
-                    />
-                </div>
-                <button 
-                    onClick={() => {
-                    localStorage.setItem('mxnzp_app_id', appId);
-                    localStorage.setItem('mxnzp_app_secret', appSecret);
-                    onSave({ appId, appSecret });
-                    onClose();
-                    }}
-                    className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 rounded-lg transition mt-2"
-                >
-                    保存配置
-                </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+const getUserCustomCollection = (db, userId) => {
+    const isPreview = typeof __app_id !== 'undefined' && __app_id;
+    if (isPreview) {
+        return collection(db, 'artifacts', __app_id, 'users', userId, 'custom_words');
+    } else {
+        return collection(db, 'users', userId, 'custom_words');
+    }
 };
 
 // ==========================================
-// 核心组件：HanziWriter 封装 (智能描红)
+// 2. 基础组件
 // ==========================================
-const HanziWriterBoard = ({ char, onLoaded }) => {
+
+const HanziWriterBoard = ({ char }) => {
   const writerRef = useRef(null);
   const divRef = useRef(null);
   const [isAnimating, setIsAnimating] = useState(false);
   const [mode, setMode] = useState('display'); 
 
   useEffect(() => {
-    // 兼容 CDN 和 NPM
-    const loadWriter = () => {
-        if (window.HanziWriter) {
-            initWriter();
-        } else {
-            // 尝试从 CDN 加载
-            const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/hanzi-writer@3.5/dist/hanzi-writer.min.js';
-            script.async = true;
-            script.onload = () => initWriter();
-            document.body.appendChild(script);
-        }
-    };
-    // 尝试优先使用 NPM 导入的 HanziWriter
-    if(typeof HanziWriter !== 'undefined') {
-        initWriter();
+    if (!window.HanziWriter) {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/hanzi-writer@3.5/dist/hanzi-writer.min.js';
+      script.async = true;
+      script.onload = () => initWriter();
+      document.body.appendChild(script);
     } else {
-        loadWriter();
+      initWriter();
     }
   }, [char]);
 
   const initWriter = () => {
-    if (!divRef.current) return;
+    if (!divRef.current || !window.HanziWriter) return;
     divRef.current.innerHTML = "";
-    
-    const WriterClass = (typeof HanziWriter !== 'undefined' ? HanziWriter : null) || window.HanziWriter;
-    
-    if (!WriterClass) return; 
-
     try {
-      writerRef.current = WriterClass.create(divRef.current, char, {
-        width: 300,
-        height: 300,
-        padding: 20,
-        showOutline: true,
-        strokeAnimationSpeed: 1, 
-        delayBetweenStrokes: 200, 
-        strokeColor: '#0d9488', 
-        radicalColor: '#f59e0b', 
-        outlineColor: '#e2e8f0', 
-        drawingWidth: 20, 
-        showCharacter: true, 
-        showHintAfterMisses: 1, 
-        highlightOnComplete: true,
+      writerRef.current = window.HanziWriter.create(divRef.current, char, {
+        width: 260, height: 260, padding: 15, showOutline: true, strokeAnimationSpeed: 1, 
+        delayBetweenStrokes: 200, strokeColor: '#0d9488', radicalColor: '#f59e0b', 
+        outlineColor: '#e2e8f0', drawingWidth: 20, showCharacter: true, 
+        showHintAfterMisses: 1, highlightOnComplete: true,
       });
-      if(onLoaded) onLoaded();
     } catch(e) {
-      console.error("HanziWriter init error", e);
-      divRef.current.innerHTML = "<div class='text-red-400 p-4 text-center'>⚠️ 无法加载笔顺</div>";
+      divRef.current.innerHTML = `<div class="w-full h-full flex items-center justify-center text-8xl text-gray-300 font-serif">${char}</div>`;
     }
   };
 
   const animate = () => {
-    if (writerRef.current) {
-      setIsAnimating(true);
-      setMode('display');
-      writerRef.current.animateCharacter({
-        onComplete: () => setIsAnimating(false)
-      });
+    if (writerRef.current && typeof writerRef.current.animateCharacter === 'function') {
+      setIsAnimating(true); setMode('display');
+      writerRef.current.animateCharacter({ onComplete: () => setIsAnimating(false) });
     }
   };
 
   const startQuiz = () => {
-    if (writerRef.current) {
+    if (writerRef.current && typeof writerRef.current.quiz === 'function') {
       setMode('quiz');
-      writerRef.current.quiz({
-        onComplete: (res) => {
-            alert(`太棒了！你写了 ${res.totalMistakes} 个错误。 (Great job!)`);
-            speak("太棒了");
-        }
-      });
+      writerRef.current.quiz({ onComplete: (res) => { alert(`太棒了！错误数: ${res.totalMistakes}`); speak("太棒了"); } });
     }
   };
 
   return (
     <div className="flex flex-col items-center gap-4">
-      <div 
-        className="relative bg-[#fff9e6] border-4 border-amber-600 rounded-2xl shadow-lg overflow-hidden select-none"
-        style={{ width: '300px', height: '300px' }}
-      >
+      <div className="relative bg-[#fff9e6] border-4 border-amber-600 rounded-2xl shadow-lg overflow-hidden select-none" style={{ width: '260px', height: '260px' }}>
         <div className="absolute inset-0 pointer-events-none z-0">
           <div className="w-full h-1/2 border-b border-dashed border-red-300 opacity-50"></div>
           <div className="absolute top-0 left-1/2 w-0 h-full border-r border-dashed border-red-300 opacity-50 transform -translate-x-1/2"></div>
-          <div className="absolute top-0 left-0 w-full h-full border border-red-300 opacity-30 m-0"></div>
         </div>
-        
         <div ref={divRef} className="absolute inset-0 z-10 cursor-crosshair" />
-        
         <div className="absolute top-2 right-2 px-2 py-1 bg-white/80 rounded text-xs font-bold text-gray-500 shadow-sm backdrop-blur-sm">
             {mode === 'display' ? '👀 观看' : '✍️ 练习'}
         </div>
       </div>
-
-      <div className="flex gap-3">
-        <button 
-          onClick={animate}
-          disabled={isAnimating}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-full font-bold shadow-md transition transform active:scale-95 ${
-            isAnimating ? 'bg-gray-100 text-gray-400' : 'bg-teal-500 hover:bg-teal-600 text-white'
-          }`}
-        >
-          <Play size={18} fill={isAnimating ? "gray" : "white"} />
-          {isAnimating ? '播放中...' : '看笔顺'}
-        </button>
-
-        <button 
-          onClick={startQuiz}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-full font-bold shadow-md transition transform active:scale-95 ${
-            mode === 'quiz' ? 'bg-amber-500 text-white ring-2 ring-amber-200' : 'bg-white text-amber-600 border border-amber-200 hover:bg-amber-50'
-          }`}
-        >
-          <Edit3 size={18} />
-          练一练
-        </button>
+      <div className="flex gap-2">
+        <button onClick={animate} disabled={isAnimating} className={`flex items-center gap-1 px-4 py-2 rounded-full font-bold shadow-md transition transform active:scale-95 text-sm ${isAnimating ? 'bg-gray-100 text-gray-400' : 'bg-teal-500 hover:bg-teal-600 text-white'}`}><Play size={16} /> 笔顺</button>
+        <button onClick={startQuiz} className={`flex items-center gap-1 px-4 py-2 rounded-full font-bold shadow-md transition transform active:scale-95 text-sm ${mode === 'quiz' ? 'bg-amber-500 text-white' : 'bg-white text-amber-600 border border-amber-200'}`}><Edit3 size={16} /> 练习</button>
       </div>
-      
-      <p className="text-xs text-gray-400 mt-2">
-         {mode === 'quiz' ? '请在田字格中按笔顺写字' : '点击“看笔顺”观看动画，或点击“练一练”开始书写'}
-      </p>
     </div>
   );
 };
 
 // ==========================================
-// 可折叠释义组件
+// 3. 模态框组件
 // ==========================================
-const ExpandableDefinition = ({ text }) => {
-  const [expanded, setExpanded] = useState(false);
-  // Reset expansion when text changes (new character selected)
-  useEffect(() => { setExpanded(false); }, [text]);
 
-  const isLong = text && text.length > 60;
-
-  return (
-    <div className="relative">
-      <p className={`text-lg text-gray-500 font-medium transition-all duration-300 ${expanded ? '' : 'line-clamp-3'}`}>
-        {text}
-      </p>
-      {isLong && (
-        <button 
-          onClick={() => setExpanded(!expanded)}
-          className="text-teal-600 text-sm font-bold mt-1 hover:text-teal-700 flex items-center gap-1 bg-white/80 backdrop-blur-sm px-2 py-0.5 rounded"
-        >
-          {expanded ? "收起 (Collapse)" : "展开更多 (Expand)"}
-          <ChevronRight size={14} className={`transform transition-transform ${expanded ? '-rotate-90' : 'rotate-90'}`} />
-        </button>
-      )}
-    </div>
-  );
+const AuthModal = ({ isOpen, onClose, onLogin, isProcessing }) => {
+    if(!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm text-center">
+                <div className="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mx-auto mb-4"><User className="text-teal-600" size={32}/></div>
+                <h3 className="text-xl font-bold mb-2">老师登录</h3>
+                <p className="text-gray-500 mb-6 text-sm">登录后可管理汉字数据和导入导出</p>
+                <button onClick={onLogin} disabled={isProcessing} className="w-full py-3 bg-teal-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-teal-700 transition shadow-lg shadow-teal-100">{isProcessing ? <Loader2 className="animate-spin"/> : <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5"/>} 使用 Google 账号登录</button>
+                <button onClick={onClose} className="mt-4 text-gray-400 text-sm hover:text-gray-600">暂不登录</button>
+            </div>
+        </div>
+    );
 };
 
-// ==========================================
-// 添加生字表单组件 (Add Form)
-// ==========================================
-const AddCharacterForm = ({ onAdd }) => {
-  const [formData, setFormData] = useState({
-    char: '', pinyin: '', definition: '', lesson: '', volume: '', words: '', sentences: '',
-    structure: '', radical: '' , strokes: '' 
-  });
+const CustomWordsModal = ({ isOpen, onClose, customWords, onAdd, onDelete, isAdding }) => {
+    const [newWord, setNewWord] = useState({ char: '', pinyin: '', sentence: '', definition: '' });
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl h-[80vh] flex flex-col">
+                 <div className="flex justify-between items-center p-4 border-b">
+                     <h3 className="font-bold flex items-center gap-2"><Crown className="text-yellow-500"/> 我的生词本</h3>
+                     <button onClick={onClose}><XCircle className="text-gray-400"/></button>
+                 </div>
+                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 grid grid-cols-2 gap-3">
+                         <input className="p-2 border rounded" placeholder="生字/词" value={newWord.char} onChange={e=>setNewWord({...newWord, char:e.target.value})}/>
+                         <input className="p-2 border rounded" placeholder="拼音" value={newWord.pinyin} onChange={e=>setNewWord({...newWord, pinyin:e.target.value})}/>
+                         <input className="p-2 border rounded col-span-2" placeholder="例句" value={newWord.sentence} onChange={e=>setNewWord({...newWord, sentence:e.target.value})}/>
+                         <input className="p-2 border rounded col-span-2" placeholder="释义" value={newWord.definition} onChange={e=>setNewWord({...newWord, definition:e.target.value})}/>
+                         <button onClick={() => {if(newWord.char) { onAdd(newWord); setNewWord({char:'',pinyin:'',sentence:'',definition:''}); }}} disabled={isAdding || !newWord.char} className="col-span-2 bg-teal-600 text-white py-2 rounded font-bold">{isAdding ? "添加中..." : "添加生词"}</button>
+                     </div>
+                     {customWords.map(w => (
+                         <div key={w.id} className="flex justify-between items-center p-3 border rounded-lg hover:bg-slate-50">
+                             <div><div className="font-bold">{w.char} <span className="text-gray-400 font-normal text-sm">{w.pinyin}</span></div><div className="text-xs text-gray-500 truncate max-w-xs">{w.sentence}</div></div>
+                             <button onClick={()=>onDelete(w.id)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button>
+                         </div>
+                     ))}
+                 </div>
+             </div>
+        </div>
+    );
+};
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!formData.char) return;
+const ImportJsonModal = ({ isOpen, onClose, onImport }) => {
+    const [jsonText, setJsonText] = useState("");
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [errorMsg, setErrorMsg] = useState("");
 
-    const newChar = {
-      ...formData,
-      id: `custom-${Date.now()}`,
-      // 将换行分隔的文本转换为数组
-      words: formData.words.split('\n').filter(w => w.trim()),
-      sentences: formData.sentences.split('\n').filter(s => s.trim()),
-      structure: formData.structure || '用户添加',
-      radical: formData.radical || '-',
-      strokes: '-',
-      isRich: true, 
-      isCustom: true,
-      updatedAt: new Date()
+    const handleImport = async () => {
+        setIsProcessing(true); setErrorMsg("");
+        try {
+            const data = JSON.parse(jsonText);
+            if (!Array.isArray(data)) throw new Error("JSON 格式错误：必须是一个数组 []");
+            if (data.length > 0 && !data[0].char) throw new Error("JSON 数据缺少 'char' 字段");
+            await onImport(data);
+            setJsonText(""); onClose();
+        } catch (e) { setErrorMsg(e.message); } finally { setIsProcessing(false); }
     };
 
-    onAdd(newChar);
-    setFormData({ char: '', pinyin: '', definition: '', lesson: '', volume: '', words: '', sentences: '', structure: '', radical: '', strokes: ''  });
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl h-[80vh] flex flex-col">
+                <div className="flex justify-between items-center p-4 border-b border-gray-100">
+                    <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><FileJson size={20} className="text-purple-500"/> 批量导入数据</h2>
+                    <button onClick={onClose}><XCircle size={20} className="text-gray-400"/></button>
+                </div>
+                <div className="p-6 flex-1 flex flex-col gap-4 overflow-hidden">
+                    <div className="bg-blue-50 p-3 rounded-lg text-xs text-blue-700"><p className="font-bold">JSON 示例:</p><pre className="bg-white p-2 rounded border border-blue-100 font-mono text-gray-600 overflow-x-auto">{`[{"char": "猫", "pinyin": "māo", "volume": "1", "lesson": "5", "words": ["小猫"], "sentences": ["我有一只猫"]}]`}</pre></div>
+                    <textarea className="flex-1 w-full p-4 border-2 border-gray-200 rounded-xl font-mono text-sm resize-none" placeholder="在此粘贴 JSON 数组..." value={jsonText} onChange={e => setJsonText(e.target.value)} />
+                    {errorMsg && <div className="text-red-500 text-sm flex items-center gap-2"><Settings size={14}/> {errorMsg}</div>}
+                </div>
+                <div className="p-4 border-t border-gray-100 flex justify-end gap-3">
+                    <button onClick={onClose} className="px-5 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button>
+                    <button onClick={handleImport} disabled={isProcessing || !jsonText} className="px-6 py-2 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 shadow-md flex items-center gap-2 disabled:opacity-50">{isProcessing ? <Loader2 className="animate-spin" size={18}/> : <UploadCloud size={18}/>} 开始导入</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// [改进] 游戏设置弹窗 (支持内容类型选择)
+const GameSettingsModal = ({ isOpen, onClose, onStart, database, userRole, hasCustomWords, gameType }) => {
+    const [count, setCount] = useState(10);
+    const [filterVol, setFilterVol] = useState("all");
+    const [filterLesson, setFilterLesson] = useState("all");
+    const [includeCustom, setIncludeCustom] = useState(false);
+    
+    // 新增：内容类型状态
+    const [contentType, setContentType] = useState('chars'); 
+
+    // 根据游戏类型自动切换默认的内容类型
+    useEffect(() => {
+        if (!isOpen) return;
+        switch (gameType) {
+            case 'splitMatch': // 连词大作战 -> 必须是词语
+                setContentType('words');
+                break;
+            case 'readMatch': // 朗读挑战 -> 必须是例句(或词语)
+                setContentType('sentences');
+                break;
+            case 'pinyinMatch': // 拼音对对碰 -> 主要是生字，现在支持选词语
+                setContentType('chars');
+                break;
+            case 'geneMatch': // 基因匹配 -> 默认词语，也可生字
+                setContentType('words'); 
+                break;
+            case 'flashcards': // 闪卡 -> 默认生字，也可词语
+                setContentType('chars');
+                break;
+            default:
+                setContentType('chars');
+        }
+    }, [isOpen, gameType]);
+
+    if (!isOpen) return null;
+
+    const sortLessons = (a, b) => (parseInt(a)||0) - (parseInt(b)||0);
+    const volumes = [...new Set(database.map(i => i.volume).filter(v => v && v !== '-'))].sort();
+    const lessons = [...new Set(database.filter(i => filterVol === 'all' || i.volume === filterVol).map(i => i.lesson).filter(l => l && l !== '-'))].sort(sortLessons);
+
+    const getGameTitle = () => {
+        switch(gameType) {
+            case 'splitMatch': return '连词大作战';
+            case 'pinyinMatch': return '拼音对对碰';
+            case 'readMatch': return '朗读挑战';
+            case 'geneMatch': return '基因匹配';
+            case 'flashcards': return '闪卡记忆';
+            default: return '游戏设置';
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[150] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 animate-in zoom-in duration-200">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><Settings size={20} className="text-teal-600"/> {getGameTitle()}</h3>
+                    <button onClick={onClose}><XCircle size={20} className="text-gray-400"/></button>
+                </div>
+
+                <div className="space-y-4">
+                    {/* 选择游戏内容 */}
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                        <label className="text-xs font-bold text-gray-500 mb-2 block">测试内容</label>
+                        <select 
+                            className="w-full p-2 bg-white border border-slate-200 rounded-lg outline-none text-sm font-medium disabled:bg-gray-100 disabled:text-gray-400"
+                            value={contentType}
+                            onChange={e => setContentType(e.target.value)}
+                            // [修改] 重新锁定 pinyinMatch，同时保持其他游戏逻辑
+                            disabled={['splitMatch', 'readMatch', 'pinyinMatch'].includes(gameType)}
+                        >
+                             <option value="chars">生字 (Characters)</option>
+                             <option value="words">词语 (Words)</option>
+                             <option value="sentences">例句 (Sentences)</option>
+                        </select>
+                        <div className="text-[10px] text-gray-400 mt-1 px-1">
+                            {gameType === 'splitMatch' && "此游戏仅支持双字词语"}
+                            {gameType === 'readMatch' && "此游戏测试整句朗读"}
+                            {gameType === 'pinyinMatch' && "此游戏测试单字拼音"}
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-xs font-bold text-gray-500 mb-1 block">数量</label>
+                            <select className="w-full p-2 bg-white border border-slate-200 rounded-lg outline-none" value={count} onChange={e => setCount(Number(e.target.value))}>
+                                <option value={5}>5 个</option><option value={10}>10 个</option><option value={20}>20 个</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-gray-500 mb-1 block">册</label>
+                            <select className="w-full p-2 bg-white border border-slate-200 rounded-lg outline-none" value={filterVol} onChange={e => { setFilterVol(e.target.value); setFilterLesson('all'); }}>
+                                <option value="all">全部</option>{volumes.map(v => <option key={v} value={v}>第 {v} 册</option>)}
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-gray-500 mb-1 block">课</label>
+                        <select className="w-full p-2 bg-white border border-slate-200 rounded-lg outline-none" value={filterLesson} onChange={e => setFilterLesson(e.target.value)}>
+                            <option value="all">全部</option>{lessons.map(l => <option key={l} value={l}>第 {l} 课</option>)}
+                        </select>
+                    </div>
+
+                    {hasCustomWords && (
+                        <div className="pt-2 border-t border-slate-100">
+                            <label className="flex items-center gap-3 p-3 rounded-xl border border-teal-100 bg-teal-50 cursor-pointer hover:bg-teal-100 transition">
+                                <input type="checkbox" checked={includeCustom} onChange={e => setIncludeCustom(e.target.checked)} className="w-5 h-5 text-teal-600 rounded focus:ring-teal-500"/>
+                                <div className="text-sm font-bold text-teal-800">混合我的生词本</div>
+                            </label>
+                        </div>
+                    )}
+
+                    <button onClick={() => onStart(gameType, { count, filterVol, filterLesson, includeCustom, contentType })} className="w-full py-3 bg-teal-600 text-white rounded-xl font-bold shadow-lg shadow-teal-200 hover:bg-teal-700 active:scale-95 transition-all mt-4">开始游戏</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const AdminCharacterForm = ({ isOpen, onClose, onSave, database, initialData, lastMeta }) => {
+  const [formData, setFormData] = useState({ char: '', pinyin: '', definition: '', lesson: '', volume: '', structure: '独体字', radical: '', strokes: '', words: '', sentences: '' });
+  const [isAutoFilled, setIsAutoFilled] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      if (initialData) {
+        setFormData({ ...initialData, words: Array.isArray(initialData.words)?initialData.words.join('\n'):'', sentences: Array.isArray(initialData.sentences)?initialData.sentences.join('\n'):'' });
+        setIsAutoFilled(true);
+      } else {
+        setFormData({ char: '', pinyin: '', definition: '', lesson: lastMeta.lesson||'', volume: lastMeta.volume||'', structure: '独体字', radical: '', strokes: '', words: '', sentences: '' });
+        setIsAutoFilled(false);
+      }
+    }
+  }, [isOpen, initialData, lastMeta]);
+
+  const handleCharChange = (e) => {
+    const inputChar = e.target.value;
+    setFormData(prev => ({ ...prev, char: inputChar }));
+    if (inputChar.length === 1 && !initialData) {
+        const exist = database.find(i => i.char === inputChar);
+        if (exist) {
+            setFormData({ ...exist, words: Array.isArray(exist.words) ? exist.words.join('\n') : '', sentences: Array.isArray(exist.sentences) ? exist.sentences.join('\n') : '' });
+            setIsAutoFilled(true);
+        } else {
+            const autoData = lookupCharData(inputChar);
+            setFormData(prev => ({ ...prev, pinyin: autoData.pinyin, lesson: lastMeta.lesson || autoData.lesson, volume: lastMeta.volume || autoData.volume, structure: autoData.structure, radical: autoData.radical, strokes: autoData.strokes, words: autoData.words, sentences: autoData.sentences }));
+            setIsAutoFilled(false);
+        }
+    }
   };
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.char) return;
+    setIsSaving(true);
+    await onSave({ ...formData, words: formData.words.split('\n').filter(w => w.trim()), sentences: formData.sentences.split('\n').filter(s => s.trim()) });
+    setIsSaving(false);
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
   return (
-    <div className="bg-white rounded-3xl shadow-md border border-teal-100 overflow-hidden mt-8 mb-10">
-      <div className="bg-teal-600 px-6 py-4 flex items-center gap-2 text-white">
-        <PlusCircle size={22} />
-        <h2 className="text-lg font-bold">添加/补充生字 (数据库)</h2>
+    <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl animate-in fade-in zoom-in duration-200">
+        <div className="flex justify-between items-center p-4 border-b border-gray-100">
+          <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+            {initialData ? <Edit3 size={20} className="text-blue-500"/> : <PlusCircle size={20} className="text-green-500"/>}
+            {initialData ? "修改数据" : "录入生字"}
+          </h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full text-gray-500"><XCircle size={20}/></button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="grid grid-cols-12 gap-4">
+            <div className="col-span-3"><label className="block text-xs font-bold text-gray-500 mb-1">汉字 *</label><input required maxLength={1} className="w-full p-2 text-center text-xl font-bold border-2 border-teal-100 rounded-lg" value={formData.char} onChange={handleCharChange} placeholder="字" disabled={!!initialData} /></div>
+            <div className="col-span-4"><label className="block text-xs font-bold text-gray-500 mb-1">拼音</label><input className="w-full p-2 border rounded-lg" value={formData.pinyin} onChange={e=>setFormData({...formData, pinyin:e.target.value})} placeholder="pīn yīn" /></div>
+            <div className="col-span-5 flex items-end pb-2">{isAutoFilled ? <span className="text-xs text-green-600">已调用</span> : <span className="text-xs text-gray-400">自动查找...</span>}</div>
+          </div>
+          <div className="grid grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+             <div><label className="block text-xs font-bold text-gray-500 mb-1">册</label><input type="number" className="w-full p-2 border rounded-lg" value={formData.volume} onChange={e=>setFormData({...formData, volume:e.target.value})} /></div>
+             <div><label className="block text-xs font-bold text-gray-500 mb-1">课次</label><input className="w-full p-2 border rounded-lg" value={formData.lesson} onChange={e=>setFormData({...formData, lesson:e.target.value})} /></div>
+             <div><label className="block text-xs font-bold text-gray-500 mb-1">结构</label><select className="w-full p-2 border rounded-lg" value={formData.structure} onChange={e => setFormData({...formData, structure: e.target.value})}>{STRUCTURE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}</select></div>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+             <div><label className="block text-xs font-bold text-gray-500 mb-1">部首</label><input className="w-full p-2 border rounded-lg" value={formData.radical} onChange={e=>setFormData({...formData, radical:e.target.value})} /></div>
+             <div><label className="block text-xs font-bold text-gray-500 mb-1">笔画数</label><input className="w-full p-2 border rounded-lg" value={formData.strokes} onChange={e=>setFormData({...formData, strokes:e.target.value})} /></div>
+             <div><label className="block text-xs font-bold text-gray-500 mb-1">英文释义</label><input className="w-full p-2 border rounded-lg" value={formData.definition} onChange={e=>setFormData({...formData, definition:e.target.value})} /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+             <div><label className="block text-xs font-bold text-gray-500 mb-1">词语</label><textarea className="w-full p-2 border rounded-lg h-32 text-sm" value={formData.words} onChange={e=>setFormData({...formData, words:e.target.value})} /></div>
+             <div><label className="block text-xs font-bold text-gray-500 mb-1">例句</label><textarea className="w-full p-2 border rounded-lg h-32 text-sm" value={formData.sentences} onChange={e=>setFormData({...formData, sentences:e.target.value})} /></div>
+          </div>
+          <div className="pt-2 flex gap-3 justify-end">
+            <button type="button" onClick={onClose} className="px-5 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button>
+            <button type="submit" disabled={isSaving} className="px-6 py-2 bg-teal-600 text-white font-bold rounded-lg">{isSaving ? <Loader2 className="animate-spin"/> : <Save/>} {initialData ? "保存" : "添加"}</button>
+          </div>
+        </form>
       </div>
-      <form onSubmit={handleSubmit} className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">汉字 (Char)</label>
-              <input 
-                required
-                maxLength={1}
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none bg-slate-50" 
-                value={formData.char}
-                onChange={e => setFormData({...formData, char: e.target.value})}
-                placeholder="例: 爱"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">拼音 (Pinyin)</label>
-              <input 
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none bg-slate-50" 
-                value={formData.pinyin}
-                onChange={e => setFormData({...formData, pinyin: e.target.value})}
-                placeholder="例: ài"
-              />
-            </div>
-          </div>
-
-          {/* 新增：部首和结构输入框 */}
-          <div className="grid grid-cols-2 gap-4">
-             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">部首 (Radical)</label>
-              <input 
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none bg-slate-50" 
-                value={formData.radical}
-                onChange={e => setFormData({...formData, radical: e.target.value})}
-                placeholder="例: 氵"
-              />
-            </div>
-             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">结构 (Structure)</label>
-              <input 
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none bg-slate-50" 
-                value={formData.structure}
-                onChange={e => setFormData({...formData, structure: e.target.value})}
-                placeholder="例: 左右结构"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">笔画 (strokes)</label>
-              <input 
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none bg-slate-50" 
-                value={formData.strokes}
-                onChange={e => setFormData({...formData, strokes: e.target.value})}
-                placeholder="例: 1"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">册 (Volume)</label>
-              <input 
-                type="number"
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none bg-slate-50" 
-                value={formData.volume}
-                onChange={e => setFormData({...formData, volume: e.target.value})}
-                placeholder="1"
-              />
-            </div>
-             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">课次 (Lesson)</label>
-              <input 
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none bg-slate-50" 
-                value={formData.lesson}
-                onChange={e => setFormData({...formData, lesson: e.target.value})}
-                placeholder="7"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">释义 (Definition)</label>
-            <input 
-              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none bg-slate-50" 
-              value={formData.definition}
-              onChange={e => setFormData({...formData, definition: e.target.value})}
-              placeholder="English definition"
-            />
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">扩展词语 (Words - 每行一个)</label>
-            <textarea 
-              className="w-full p-2 border rounded-lg h-24 focus:ring-2 focus:ring-teal-500 outline-none font-mono text-sm bg-slate-50" 
-              value={formData.words}
-              onChange={e => setFormData({...formData, words: e.target.value})}
-              placeholder="爱好 (hobby)&#10;可爱 (cute)"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">扩展例句 (Sentences - 每行一个)</label>
-            <textarea 
-              className="w-full p-2 border rounded-lg h-24 focus:ring-2 focus:ring-teal-500 outline-none font-mono text-sm bg-slate-50" 
-              value={formData.sentences}
-              onChange={e => setFormData({...formData, sentences: e.target.value})}
-              placeholder="我爱我的家。&#10;这只猫很可爱。"
-            />
-          </div>
-          <button type="submit" className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition shadow-md">
-            <Save size={20} />
-            保存到数据库 (Save to Cloud)
-          </button>
-        </div>
-      </form>
     </div>
   );
 };
 
 // ==========================================
-// 主应用组件
+// 4. 游戏组件 (Game Components)
+// ==========================================
+
+const GameOverModal = ({ score, total, gameType, onRestart, onExit, db }) => {
+    const [playerName, setPlayerName] = useState("");
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [submitted, setSubmitted] = useState(false);
+    const [rankings, setRankings] = useState([]);
+
+    useEffect(() => {
+        if (!db) return;
+        const fetchRankings = async () => {
+            try {
+                const colRef = getLeaderboardCollection(db);
+                const snapshot = await getDocs(colRef);
+                const data = snapshot.docs
+                    .map(d => d.data())
+                    .filter(d => d.gameType === gameType)
+                    .sort((a,b) => b.score - a.score)
+                    .slice(0, 10);
+                setRankings(data);
+            } catch (e) {
+                console.error("Rankings fetch error", e);
+            }
+        };
+        fetchRankings();
+    }, [db, gameType, submitted]);
+
+    const handleSubmitScore = async () => {
+        if (!playerName.trim() || !db) return;
+        setIsSubmitting(true);
+        try {
+            const colRef = getLeaderboardCollection(db);
+            await addDoc(colRef, {
+                name: playerName,
+                score: score,
+                total: total,
+                gameType: gameType,
+                date: new Date().toISOString()
+            });
+            setSubmitted(true);
+        } catch (e) {
+            console.error("Score submit failed", e);
+            alert("分数提交失败");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 text-center animate-in zoom-in duration-300">
+                <div className="flex justify-center mb-4">
+                    <Trophy size={64} className="text-yellow-500 drop-shadow-lg" />
+                </div>
+                <h2 className="text-3xl font-bold text-slate-800 mb-2">挑战结束!</h2>
+                <div className="text-5xl font-black text-teal-600 mb-2">{score} <span className="text-xl text-gray-400 font-normal">分</span></div>
+                
+                {!submitted ? (
+                    <div className="mt-6 bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                        <p className="text-sm text-gray-500 mb-3">输入名字，上榜单！</p>
+                        <div className="flex gap-2">
+                            <input 
+                                className="flex-1 p-3 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-teal-500"
+                                placeholder="你的名字..."
+                                value={playerName}
+                                onChange={e => setPlayerName(e.target.value)}
+                                maxLength={10}
+                            />
+                            <button 
+                                onClick={handleSubmitScore}
+                                disabled={isSubmitting || !playerName}
+                                className="px-4 py-2 bg-teal-600 text-white rounded-xl font-bold disabled:opacity-50"
+                            >
+                                {isSubmitting ? <Loader2 className="animate-spin"/> : "保存"}
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="mt-6">
+                        <h3 className="font-bold text-gray-700 mb-3 flex items-center justify-center gap-2"><Crown size={18} className="text-amber-500"/> 排行榜 Top 10</h3>
+                        <div className="bg-slate-50 rounded-xl overflow-hidden border border-slate-100 max-h-48 overflow-y-auto">
+                            {rankings.map((r, idx) => (
+                                <div key={idx} className={`flex justify-between items-center p-3 border-b border-slate-100 last:border-0 ${r.name === playerName && r.score === score ? 'bg-yellow-50' : ''}`}>
+                                    <div className="flex items-center gap-3">
+                                        <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${idx < 3 ? 'bg-amber-100 text-amber-700' : 'bg-gray-200 text-gray-600'}`}>
+                                            {idx + 1}
+                                        </span>
+                                        <span className="font-medium text-slate-700">{r.name}</span>
+                                    </div>
+                                    <span className="font-bold text-teal-600">{r.score}</span>
+                                </div>
+                            ))}
+                            {rankings.length === 0 && <div className="p-4 text-gray-400 text-sm">虚位以待，等你来战！</div>}
+                        </div>
+                    </div>
+                )}
+
+                <div className="flex gap-3 mt-8">
+                    <button onClick={onExit} className="flex-1 py-3 rounded-xl font-bold text-gray-500 hover:bg-gray-100 transition">退出</button>
+                    <button onClick={onRestart} className="flex-1 py-3 rounded-xl font-bold bg-teal-600 text-white hover:bg-teal-700 shadow-lg shadow-teal-200 transition">再玩一次</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const GameHeader = ({ title, current, total, audioEnabled, toggleAudio, onExit }) => (
+    <div className="flex justify-between items-center mb-4 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
+        <button onClick={onExit} className="text-gray-500 hover:text-gray-800 flex items-center gap-1 font-bold px-2">
+            <ChevronRight className="rotate-180"/> 退出
+        </button>
+        <div className="font-bold text-lg text-slate-700">{title} <span className="text-sm bg-slate-100 px-2 py-1 rounded-full ml-2 text-slate-500">{current}/{total}</span></div>
+    </div>
+);
+
+// [游戏 1] 连词大作战 (Split Word Match) - [修复] 增强词语提取逻辑
+const SplitWordMatchGame = ({ items, onBack }) => {
+    const [leftCol, setLeftCol] = useState([]); const [rightCol, setRightCol] = useState([]);
+    const [selectedLeft, setSelectedLeft] = useState(null); const [matchedPairs, setMatchedPairs] = useState([]);
+    const [score, setScore] = useState(0); const [pairs, setPairs] = useState([]);
+
+    useEffect(() => {
+        // [修复] 增加对 items 是否存在的判断，以及 trim() 处理
+        if (!items || items.length === 0) return;
+
+        const allWords = items.flatMap(i => sanitizeWords(i.words || [])).filter(w => w && w.trim().length >= 2);
+        const uniqueWords = [...new Set(allWords)];
+        
+        // 如果提取不到词语，避免报错，直接不生成
+        if (uniqueWords.length === 0) {
+            setPairs([]); return;
+        }
+
+        const gameWords = uniqueWords.sort(() => Math.random() - 0.5).slice(0, 8).map((w, idx) => ({
+            id: idx, full: w, left: w[0], right: w.slice(1)
+        }));
+        setPairs(gameWords);
+        setLeftCol(gameWords.map(w => ({ id: w.id, val: w.left })).sort(() => Math.random() - 0.5));
+        setRightCol(gameWords.map(w => ({ id: w.id, val: w.right })).sort(() => Math.random() - 0.5));
+    }, [items]);
+
+    const handleLeft = (item) => { if (matchedPairs.find(p => p.id === item.id)) return; setSelectedLeft(item); speak(item.val); };
+    const handleRight = (item) => {
+        if (!selectedLeft || matchedPairs.find(p => p.id === item.id)) return;
+        if (selectedLeft.id === item.id) {
+            const word = pairs.find(p => p.id === item.id);
+            setMatchedPairs([...matchedPairs, word]); setScore(s => s + 10); speak(word.full); setSelectedLeft(null);
+        } else { speak("Wrong"); setSelectedLeft(null); }
+    };
+
+    if (pairs.length > 0 && matchedPairs.length === pairs.length) return <GameOverModal score={score} total={pairs.length * 10} onRestart={onBack} onExit={onBack} />;
+    
+    // [改进] 提示信息更友好
+    if (pairs.length === 0) return <div className="p-8 text-center text-gray-400 flex flex-col items-center justify-center h-full"><Search size={48} className="mb-4 text-gray-200"/> 没有找到足够的双字词语数据 <br/><span className="text-sm text-gray-300 mt-2">请尝试选择其他课程或添加更多含有词语的生字</span></div>;
+
+    return (
+        <div className="flex flex-col h-full">
+            <GameHeader title="连词大作战" current={matchedPairs.length} total={pairs.length} onExit={onBack} />
+            <div className="flex-1 flex gap-8 p-4">
+                <div className="flex-1 flex flex-col gap-3">{leftCol.map(l => <button key={l.id} onClick={() => handleLeft(l)} disabled={matchedPairs.find(p=>p.id===l.id)} className={`h-16 rounded-xl text-2xl font-bold border-2 transition-all ${selectedLeft?.id===l.id ? 'bg-indigo-500 text-white border-indigo-600' : 'bg-white border-indigo-100 text-indigo-900'} ${matchedPairs.find(p=>p.id===l.id) ? 'opacity-0' : 'opacity-100'}`}>{l.val}...</button>)}</div>
+                <div className="flex-1 flex flex-col gap-3">{rightCol.map(r => <button key={r.id} onClick={() => handleRight(r)} disabled={matchedPairs.find(p=>p.id===r.id)} className={`h-16 rounded-xl text-2xl font-bold border-2 transition-all bg-white border-purple-100 text-purple-900 hover:bg-purple-50 ${matchedPairs.find(p=>p.id===r.id) ? 'opacity-0' : 'opacity-100'}`}>...{r.val}</button>)}</div>
+            </div>
+        </div>
+    );
+};
+
+// [游戏 2] 拼音对对碰 (Char vs Pinyin) - [恢复] 仅限单字
+const PinyinMatchGame = ({ items, onBack }) => {
+    const [leftCol, setLeftCol] = useState([]); const [rightCol, setRightCol] = useState([]);
+    const [selectedLeft, setSelectedLeft] = useState(null); const [matchedIds, setMatchedIds] = useState([]);
+    
+    useEffect(() => {
+        // [恢复] 只处理单字，不处理词语
+        let gameItems = items.map((item, idx) => ({ id: idx, char: item.char, pinyin: item.pinyin }));
+        
+        // 过滤掉没有内容的项目
+        gameItems = gameItems.filter(i => i.char && i.char.trim());
+
+        setLeftCol(gameItems.sort(() => Math.random() - 0.5));
+        setRightCol([...gameItems].sort(() => Math.random() - 0.5));
+    }, [items]);
+
+    const handleLeft = (item) => { if (matchedIds.includes(item.id)) return; setSelectedLeft(item); speak(item.char); };
+    const handleRight = (item) => {
+        if (!selectedLeft || matchedIds.includes(item.id)) return;
+        if (selectedLeft.id === item.id) { setMatchedIds([...matchedIds, item.id]); setSelectedLeft(null); speak("Right"); } else { speak("Wrong"); setSelectedLeft(null); }
+    };
+
+    if (matchedIds.length > 0 && matchedIds.length === leftCol.length) return <GameOverModal score={100} total={100} onRestart={onBack} onExit={onBack} />;
+
+    return (
+        <div className="flex flex-col h-full">
+            <GameHeader title="拼音对对碰 (生字)" current={matchedIds.length} total={leftCol.length} onExit={onBack} />
+            <div className="flex-1 flex gap-4 p-4 overflow-y-auto">
+                <div className="flex-1 grid grid-cols-2 gap-3 content-start">
+                    {leftCol.map(l => (
+                        <button key={l.id} onClick={() => handleLeft(l)} disabled={matchedIds.includes(l.id)} 
+                            className={`h-24 rounded-xl text-3xl font-serif font-bold border-2 transition-all shadow-sm ${selectedLeft?.id===l.id ? 'bg-pink-500 text-white border-pink-600 scale-105' : 'bg-white border-pink-100 text-slate-700 hover:border-pink-300'} ${matchedIds.includes(l.id) ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+                            {l.char}
+                        </button>
+                    ))}
+                </div>
+                <div className="flex-1 grid grid-cols-2 gap-3 content-start">
+                    {rightCol.map(r => (
+                        <button key={r.id} onClick={() => handleRight(r)} disabled={matchedIds.includes(r.id)} 
+                            className={`h-24 rounded-xl text-2xl font-bold border-2 transition-all shadow-sm bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 ${matchedIds.includes(r.id) ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+                            {r.pinyin}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// [游戏 3] 基因匹配 (Original Word Match)
+{/*const GeneMatchGame = ({ items, onBack, contentType }) => {
+    const [words, setWords] = useState([]); const [definitions, setDefinitions] = useState([]);
+    const [selectedWord, setSelectedWord] = useState(null); const [matchedIds, setMatchedIds] = useState([]);
+    useEffect(() => {
+        let gameItems = [];
+        if (contentType === 'words') {
+             gameItems = items.flatMap((item, idx) => {
+                 const wList = sanitizeWords(item.words);
+                 return wList.map((w, subIdx) => ({ id: `${idx}-${subIdx}`, word: w, meaning: item.definition || "暂无释义" }));
+             }).slice(0, 10);
+        } else {
+             gameItems = items.map((item, idx) => ({ id: idx, word: item.char, meaning: item.definition || "暂无释义" }));
+        }
+        setWords(gameItems.sort(() => Math.random() - 0.5));
+        setDefinitions([...gameItems].sort(() => Math.random() - 0.5));
+    }, [items, contentType]);
+
+    const handleWordClick = (id) => { if (matchedIds.includes(id)) return; setSelectedWord(id); speak(words.find(w => w.id === id).word); };
+    const handleDefClick = (id) => {
+        if (!selectedWord || matchedIds.includes(id)) return;
+        if (selectedWord === id) { setMatchedIds([...matchedIds, id]); setSelectedWord(null); speak("Right"); } else { speak("Wrong"); setSelectedWord(null); }
+    };
+    if (matchedIds.length > 0 && matchedIds.length === words.length) return <GameOverModal score={100} total={100} onRestart={onBack} onExit={onBack} />;
+
+    return (
+        <div className="flex flex-col h-full">
+            <GameHeader title="基因匹配" current={matchedIds.length} total={words.length} onExit={onBack} />
+            <div className="flex-1 flex gap-4 p-4">
+                <div className="w-[30%] flex flex-col gap-3 overflow-y-auto">{words.map(w => <button key={w.id} onClick={() => handleWordClick(w.id)} disabled={matchedIds.includes(w.id)} className={`h-20 rounded-xl flex items-center justify-center text-xl font-bold border-2 transition-all ${matchedIds.includes(w.id) ? 'opacity-0' : 'opacity-100'} ${selectedWord === w.id ? 'bg-teal-600 text-white border-teal-600' : 'bg-white border-slate-200 text-slate-800'}`}>{w.word}</button>)}</div>
+                <div className="w-[70%] flex flex-col gap-3 overflow-y-auto">{definitions.map(d => <button key={d.id} onClick={() => handleDefClick(d.id)} disabled={matchedIds.includes(d.id)} className={`h-20 px-4 rounded-xl flex items-center justify-start text-sm text-left border-2 transition-all bg-white border-slate-200 text-slate-600 hover:bg-slate-50 ${matchedIds.includes(d.id) ? 'opacity-0' : 'opacity-100'}`}>{d.meaning}</button>)}</div>
+            </div>
+        </div>
+    );
+};*/}
+
+// [改进] 朗读挑战 (Read Match) - 集成 Web Speech API
+const ReadMatchGame = ({ items, onBack }) => {
+    const [index, setIndex] = useState(0);
+    const [isListening, setIsListening] = useState(false); 
+    const [feedback, setFeedback] = useState(null); // null, 'listening', 'correct', 'incorrect'
+    const [recognizedText, setRecognizedText] = useState("");
+
+    const sentences = useMemo(() => {
+        return items.flatMap(item => {
+            const sList = sanitizeWords(item.sentences);
+            return sList.map(s => ({ original: s, clean: normalizeText(s), hint: item.char }));
+        }).filter(s => s.original.length > 2).slice(0, 10);
+    }, [items]);
+    
+    const current = sentences[index];
+
+    // 语音识别逻辑
+    const startListening = () => {
+        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+            alert("您的浏览器不支持语音识别，将使用模拟模式。请使用 Chrome 浏览器体验完整功能。");
+            simulateListening();
+            return;
+        }
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'zh-CN';
+        recognition.continuous = false;
+        recognition.interimResults = false;
+
+        setIsListening(true);
+        setFeedback('listening');
+        setRecognizedText("");
+
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            setRecognizedText(transcript);
+            checkResult(transcript);
+            setIsListening(false);
+        };
+
+        recognition.onerror = (event) => {
+            console.error("Speech error", event.error);
+            setIsListening(false);
+            setFeedback('error');
+        };
+
+        recognition.onend = () => {
+            setIsListening(false);
+        };
+
+        recognition.start();
+    };
+
+    const simulateListening = () => {
+        setIsListening(true); setFeedback('listening');
+        setTimeout(() => {
+            setIsListening(false); 
+            checkResult(current.clean);
+        }, 1500);
+    };
+
+    // [改进] 比对逻辑，利用更严格的 normalizeText
+    const checkResult = (transcript) => {
+        const spoken = normalizeText(transcript);
+        const target = current.clean;
+        
+        // 只要包含目标内容的核心文字即可（因为已经去除了所有标点和空格）
+        if (spoken.includes(target) || target.includes(spoken) || spoken === target) {
+            setFeedback('correct'); 
+            speak("太棒了"); 
+            setTimeout(() => { 
+                setRecognizedText("");
+                if (index < sentences.length - 1) { 
+                    setIndex(prev => prev + 1); setFeedback(null); 
+                } else { 
+                    setIndex(prev => prev + 1); 
+                } 
+            }, 1500); 
+        } else { 
+            setFeedback('incorrect'); 
+            speak("再试一次");
+        }
+    };
+
+    if (!current) return <GameOverModal score={100} total={100} onRestart={onBack} onExit={onBack} />;
+    
+    return (
+        <div className="flex flex-col h-full items-center p-6">
+            <GameHeader title="朗读挑战" current={index + 1} total={sentences.length} onExit={onBack} />
+            
+            <div className="text-gray-400 font-bold mb-4 text-xl tracking-widest bg-gray-50 px-4 py-1 rounded-full">{current.hint}</div>
+            
+            <div className="w-full bg-white p-8 rounded-3xl border-2 border-blue-100 flex flex-col items-center justify-center min-h-[200px] shadow-sm mb-6">
+                <p className="text-2xl font-medium text-slate-800 text-center leading-loose">{current.original}</p>
+                {recognizedText && (
+                    <div className="mt-4 text-sm text-gray-500 bg-gray-50 px-3 py-1 rounded-lg">
+                        识别结果: "{recognizedText}"
+                    </div>
+                )}
+            </div>
+
+            <div className="flex flex-col items-center gap-4">
+                {feedback === 'listening' && <div className="text-blue-500 animate-pulse font-bold">正在聆听...</div>}
+                {feedback === 'correct' && <div className="text-green-500 font-bold flex items-center gap-2"><CheckCircle2/> 发音准确</div>}
+                {feedback === 'incorrect' && <div className="text-red-500 font-bold flex items-center gap-2"><XCircle/> 请重读</div>}
+                {feedback === 'error' && <div className="text-gray-400 text-xs">识别失败，请检查麦克风权限</div>}
+
+                <button 
+                    onClick={startListening} 
+                    disabled={isListening || feedback === 'correct'}
+                    className={`w-24 h-24 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 ${
+                        isListening ? 'bg-red-500 scale-110 ring-8 ring-red-100' : 
+                        feedback === 'correct' ? 'bg-green-500 scale-0' : 
+                        'bg-blue-600 hover:bg-blue-700 hover:scale-105'
+                    }`}
+                >
+                    {isListening ? <Activity className="text-white animate-pulse" size={40}/> : <Mic className="text-white" size={40}/>}
+                </button>
+                <p className="text-gray-400 text-sm mt-2">点击话筒，大声朗读例句</p>
+            </div>
+        </div>
+    );
+};
+
+// [恢复] 闪卡记忆 (FlashCard) - 网格 + 弹窗 + 老师评分 + 手动发音
+const FlashCardGame = ({ items, onBack, db, contentType }) => { // 接收 contentType
+    const [score, setScore] = useState(0);
+    const [audioEnabled, setAudioEnabled] = useState(false); 
+    const [cards, setCards] = useState([]);
+    const [collected, setCollected] = useState([]);
+    const [mistakes, setMistakes] = useState([]);
+    const [gameOver, setGameOver] = useState(false);
+    const [flippedCard, setFlippedCard] = useState(null);
+    const [showPinyin, setShowPinyin] = useState(false); 
+
+    useEffect(() => {
+        let allCardsData = [];
+        
+        // [修复] 根据 contentType 生成卡片
+        if (contentType === 'sentences') {
+            // 例句模式
+            items.forEach(item => {
+                const sList = sanitizeWords(item.sentences);
+                if (sList.length > 0) {
+                    sList.forEach(s => {
+                        allCardsData.push({
+                            text: s,
+                            pinyin: '', 
+                            sentence: '', // 正面就是例句，所以不需要额外例句字段
+                            definition: `${item.char} (${item.pinyin}) - ${item.definition || '暂无释义'}` // 背面显示生字信息
+                        });
+                    });
+                }
+            });
+        } else if (contentType === 'words') {
+            // 词语模式
+            items.forEach(item => {
+                const wList = sanitizeWords(item.words);
+                const sList = sanitizeWords(item.sentences);
+                if (wList.length > 0) {
+                    wList.forEach((word, idx) => {
+                        allCardsData.push({ 
+                            text: word, 
+                            pinyin: item.pinyin || '',
+                            sentence: sList[idx] || '', 
+                            definition: item.definition 
+                        });
+                    });
+                }
+            });
+        } else {
+            // 生字模式 (默认)
+            items.forEach(item => {
+                const sList = sanitizeWords(item.sentences);
+                if (item.char) {
+                    allCardsData.push({ 
+                        text: item.char, 
+                        pinyin: item.pinyin,
+                        sentence: sList[0] || '', 
+                        definition: item.definition
+                    });
+                }
+            });
+        }
+
+        // 去重逻辑 (针对 text)
+        const uniqueMap = new Map();
+        allCardsData.forEach(w => uniqueMap.set(w.text, w));
+        const uniqueCards = Array.from(uniqueMap.values());
+
+        const gameCards = uniqueCards.sort(() => Math.random() - 0.5).slice(0, 20).map((w,i) => ({
+            id: i, 
+            content: w.text, 
+            pinyin: w.pinyin,
+            sentence: w.sentence, 
+            definition: w.definition,
+            status: 'hidden'
+        }));
+        setCards(gameCards);
+    }, [items, contentType]);
+
+    const handleFlip = (card) => {
+        speak(card.content, audioEnabled);
+        setFlippedCard(card); // Open Modal
+        setShowPinyin(false); 
+    };
+
+    const handleGrade = (isCorrect) => {
+        if (!flippedCard) return;
+        const cardId = flippedCard.id;
+        
+        setCards(prev => prev.filter(c => c.id !== cardId));
+        setFlippedCard(null); // Close Modal
+
+        if (isCorrect) {
+            setScore(s => s + 1);
+            setCollected(prev => [...prev, flippedCard]);
+        } else {
+            setMistakes(prev => [...prev, { ...flippedCard, status: 'hidden' }]); 
+        }
+    };
+
+    const handleRetryMistakes = () => {
+        setCards(mistakes.sort(() => Math.random() - 0.5));
+        setMistakes([]);
+    };
+
+    const getTitle = () => {
+        if (contentType === 'sentences') return "例句闪卡";
+        if (contentType === 'words') return "词语闪卡";
+        return "生字闪卡";
+    };
+
+    return (
+        <div className="flex h-full gap-4">
+            <div className="w-48 flex flex-col gap-4">
+                <div className="bg-red-50 rounded-2xl border border-red-100 p-4 h-full flex flex-col">
+                    <h3 className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2 flex items-center gap-2"><XCircle size={14}/> 纠错本</h3>
+                    <div className="flex-1 overflow-y-auto space-y-2">
+                        {mistakes.map((m, idx) => <div key={idx} className="bg-white p-2 rounded text-sm text-slate-600 shadow-sm border-l-4 border-red-300">{m.content}</div>)}
+                    </div>
+                    {mistakes.length > 0 && cards.length === 0 && <button onClick={handleRetryMistakes} className="mt-3 w-full py-2 bg-red-500 text-white rounded-xl text-sm font-bold shadow-md animate-bounce"><RefreshCw size={14} className="inline mr-1"/> 重练错题</button>}
+                </div>
+            </div>
+
+            <div className="flex-1 flex flex-col">
+                <GameHeader title={getTitle()} current={collected.length} total={collected.length + cards.length + mistakes.length} audioEnabled={audioEnabled} toggleAudio={() => setAudioEnabled(!audioEnabled)} onExit={onBack} />
+                <div className="flex-1 bg-slate-50/50 rounded-3xl border border-slate-200 p-4 overflow-y-auto relative">
+                    {cards.length > 0 ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                            {cards.map((card) => (
+                                <div key={card.id} className="aspect-[4/3] rounded-2xl shadow-sm border-2 bg-gradient-to-br from-teal-400 to-teal-600 border-teal-600 hover:scale-105 transition cursor-pointer flex items-center justify-center" onClick={() => handleFlip(card)}>
+                                    <div className="text-white/30"><HelpCircle size={32}/></div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : <div className="h-full flex flex-col items-center justify-center text-gray-400"><Star size={48} className="text-yellow-400 mb-4"/><p>练习完成！</p><button onClick={() => setGameOver(true)} className="mt-6 px-8 py-3 bg-teal-600 text-white rounded-full font-bold shadow-lg">查看成绩</button></div>}
+                </div>
+            </div>
+
+            <div className="w-48 flex flex-col gap-4">
+                <div className="bg-green-50 rounded-2xl border border-green-100 p-4 h-full flex flex-col">
+                    <h3 className="text-xs font-bold text-green-600 uppercase tracking-wider mb-2 flex items-center gap-2"><Save size={14}/> 收集箱 ({score})</h3>
+                    <div className="flex-1 overflow-y-auto space-y-2">
+                        {collected.map((c, idx) => <div key={idx} className="bg-white p-2 rounded text-sm text-green-700 shadow-sm border-l-4 border-green-400 animate-in slide-in-from-left">{c.content}</div>)}
+                    </div>
+                </div>
+            </div>
+
+            {/* BIG CARD MODAL */}
+            {flippedCard && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 animate-in fade-in duration-200 backdrop-blur-sm">
+                    <div className="bg-white w-full max-w-5xl aspect-[4/3] rounded-[2rem] shadow-2xl flex flex-col items-center justify-center p-8 relative animate-in zoom-in-95 duration-300 border-8 border-teal-100">
+                        {/* Audio Button - Manual Trigger */}
+                        <button onClick={() => speak(flippedCard.content)} className="absolute top-8 left-8 p-3 bg-teal-50 text-teal-600 rounded-full hover:bg-teal-100 transition shadow-sm z-50">
+                            <Volume2 size={24}/>
+                        </button>
+
+                        <div className="absolute top-8 right-8">
+                            <button onClick={() => setShowPinyin(!showPinyin)} className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200 transition">
+                                {showPinyin ? <EyeOff size={20}/> : <Eye size={20}/>}
+                                {showPinyin ? "隐藏拼音" : "查看拼音"}
+                            </button>
+                        </div>
+
+                        <div className="flex-1 flex flex-col items-center justify-center w-full">
+                            {showPinyin && <div className="text-5xl font-bold text-gray-400 mb-4">{flippedCard.pinyin}</div>}
+                            <div 
+                                className={`font-bold text-slate-800 leading-tight text-center break-words ${contentType === 'sentences' ? 'text-6xl px-12' : 'text-[10rem]'}`}
+                                style={{ fontFamily: '"KaiTi", "STKaiti", "SimKai", serif', lineHeight: '1.1' }}
+                            >
+                                {flippedCard.content}
+                            </div>
+                            
+                            {/* 如果是生字或词语模式，显示例句 */}
+                            {contentType !== 'sentences' && flippedCard.sentence && (
+                                <div className="mt-6 text-xl text-slate-500 max-w-2xl text-center bg-slate-50 px-6 py-3 rounded-xl border border-slate-100">
+                                    <span className="font-bold mr-2 text-slate-400">例句:</span>
+                                    {flippedCard.sentence}
+                                </div>
+                            )}
+
+                            {/* 如果是例句模式，显示来源释义 */}
+                            {contentType === 'sentences' && flippedCard.definition && (
+                                <div className="mt-6 text-xl text-slate-500 max-w-2xl text-center bg-slate-50 px-6 py-3 rounded-xl border border-slate-100">
+                                    <span className="font-bold mr-2 text-slate-400">来源:</span>
+                                    {flippedCard.definition}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex gap-12 mb-8 mt-4">
+                            <button onClick={() => handleGrade(true)} className="p-3 bg-green-100 text-green-600 rounded-full hover:bg-green-500 hover:text-white transition transform hover:scale-110 shadow-lg">
+                                <CheckCircle2 size={40}/>
+                            </button>
+                            <button onClick={() => handleGrade(false)} className="p-3 bg-red-100 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition transform hover:scale-110 shadow-lg">
+                                <XCircle size={40}/>
+                            </button>
+                        </div>
+                        <p className="absolute bottom-6 text-gray-400 text-sm">请朗读内容，老师评分</p>
+                    </div>
+                </div>
+            )}
+
+            {gameOver && <GameOverModal score={score} total={collected.length + mistakes.length} gameType="flashcards" onRestart={() => window.location.reload()} onExit={onBack} db={db} />}
+        </div>
+    );
+};
+
+const GameSelector = ({ onOpenSettings }) => (
+    <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
+        <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2"><Gamepad2 className="text-purple-500"/> 游戏练习中心</h2>
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <button onClick={() => onOpenSettings('splitMatch')} className="group p-6 bg-indigo-50 hover:bg-indigo-100 rounded-2xl border-2 border-indigo-100 hover:border-indigo-300 transition text-left h-full">
+                <div className="text-3xl mb-3">🧩</div>
+                <div className="font-bold text-indigo-800 text-lg">连词大作战</div>
+                <div className="text-xs text-indigo-500 mt-1">词语拆分与组合</div>
+            </button>
+            <button onClick={() => onOpenSettings('pinyinMatch')} className="group p-6 bg-pink-50 hover:bg-pink-100 rounded-2xl border-2 border-pink-100 hover:border-pink-300 transition text-left h-full">
+                <div className="text-3xl mb-3">🅰️</div>
+                <div className="font-bold text-pink-800 text-lg">拼音对对碰</div>
+                <div className="text-xs text-pink-500 mt-1">汉字 vs 拼音</div>
+            </button>
+            <button onClick={() => onOpenSettings('readMatch')} className="group p-6 bg-blue-50 hover:bg-blue-100 rounded-2xl border-2 border-blue-100 hover:border-blue-300 transition text-left h-full">
+                <div className="text-3xl mb-3">🎤</div>
+                <div className="font-bold text-blue-800 text-lg">朗读挑战</div>
+                <div className="text-xs text-blue-500 mt-1">朗读例句 (语音识别)</div>
+            </button>
+            {/* <button onClick={() => onOpenSettings('geneMatch')} className="group p-6 bg-teal-50 hover:bg-teal-100 rounded-2xl border-2 border-teal-100 hover:border-teal-300 transition text-left h-full">
+                <div className="text-3xl mb-3">🧬</div>
+                <div className="font-bold text-teal-800 text-lg">基因匹配</div>
+                <div className="text-xs text-teal-500 mt-1">词/字 vs 释义</div>
+            </button> */}
+            <button onClick={() => onOpenSettings('flashcards')} className="group p-6 bg-amber-50 hover:bg-amber-100 rounded-2xl border-2 border-amber-100 hover:border-amber-300 transition text-left h-full">
+                <div className="text-3xl mb-3">📇</div>
+                <div className="font-bold text-amber-800 text-lg">闪卡记忆</div>
+                <div className="text-xs text-amber-500 mt-1">手动发音，积分排行</div>
+            </button>
+        </div>
+    </div>
+);
+
+// ==========================================
+// 主应用 (Main)
 // ==========================================
 export default function HanziLearningApp() {
-  const [database, setDatabase] = useState([]);
+  const [database, setDatabase] = useState([]); 
+  const [customWords, setCustomWords] = useState([]); 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedChar, setSelectedChar] = useState(null);
   const [showList, setShowList] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [apiConfig, setApiConfig] = useState({ appId: '', appSecret: '' });
-  const [isSearchingApi, setIsSearchingApi] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
-  const [errorMsg, setErrorMsg] = useState(null);
+  
+  // Game State
+  const [appMode, setAppMode] = useState('learn'); 
+  const [gameConfig, setGameConfig] = useState(null); 
+  const [isGameSettingsOpen, setIsGameSettingsOpen] = useState(false);
+  const [pendingGameType, setPendingGameType] = useState(null);
 
-  // 初始化数据
+  // Auth State
+  const [user, setUser] = useState(null);
+  const [isFirebaseAdmin, setIsFirebaseAdmin] = useState(false);
+  const [isManualAdmin, setIsManualAdmin] = useState(false);
+  const isAdmin = isFirebaseAdmin || isManualAdmin; 
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isProcessingAuth, setIsProcessingAuth] = useState(false);
+
+  // Modals
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
+  const [isCustomAdding, setIsCustomAdding] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [editingChar, setEditingChar] = useState(null);
+  const [lastMeta, setLastMeta] = useState({ volume: '', lesson: '' });
+
+  const firebaseApp = useRef(null);
+  const auth = useRef(null);
+  const db = useRef(null);
+
+  // 1. Init Firebase
   useEffect(() => {
-    const savedAppId = localStorage.getItem('mxnzp_app_id');
-    const savedAppSecret = localStorage.getItem('mxnzp_app_secret');
-    const finalAppId = savedAppId || 'yht8jotxk8qllhot';
-    const finalAppSecret = savedAppSecret || 'A0WaDQ9lfGnPTA9eqHFE45ZR9LY3B4uQ';
-    setApiConfig({ appId: finalAppId, appSecret: finalAppSecret });
-    
-    if(!savedAppId) localStorage.setItem('mxnzp_app_id', finalAppId);
-    if(!savedAppSecret) localStorage.setItem('mxnzp_app_secret', finalAppSecret);
+    try {
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : YOUR_FIREBASE_CONFIG;
+        if (!firebaseConfig.apiKey) return;
+        firebaseApp.current = initializeApp(firebaseConfig);
+        auth.current = getAuth(firebaseApp.current);
+        db.current = getFirestore(firebaseApp.current);
+        
+        const initAuth = async () => {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await signInWithCustomToken(auth.current, __initial_auth_token);
+            } else {
+                await signInAnonymously(auth.current);
+            }
+        };
+        initAuth();
+
+        onAuthStateChanged(auth.current, (currentUser) => {
+            setUser(currentUser);
+            if (currentUser && currentUser.email && ADMIN_EMAILS.includes(currentUser.email)) {
+                setIsFirebaseAdmin(true);
+            } else {
+                setIsFirebaseAdmin(false);
+            }
+        });
+    } catch (err) { console.error("Firebase init failed:", err); }
   }, []);
 
-  // 核心：监听 Firestore 数据
+  // 2. Listen Data
   useEffect(() => {
-    if (!db) {
-        console.error("Firebase DB 未初始化");
-        return;
-    }
-    
-    const q = query(collection(db, "characters"), orderBy("char"));
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-        setIsConnected(true); 
-        const chars = [];
-        querySnapshot.forEach((doc) => {
-            chars.push({ id: doc.id, ...doc.data() });
-        });
-        
-        if (chars.length > 0) {
-            setDatabase(chars);
-            if (!selectedChar) { 
-                setTimeout(() => setSelectedChar(chars[0]), 0);
-            }
-        } else {
-            setDatabase([]); 
-        }
-    }, (error) => {
-       console.error("Firebase Listen Error:", error);
-       setIsConnected(false);
-       if(error.code === 'permission-denied') {
-           setErrorMsg("权限不足：请在 Firebase 控制台将规则设置为 allow read, write: if true;");
-       } else {
-           setErrorMsg(`连接错误: ${error.message}`);
-       }
+    if (!db.current || !user) return;
+    const unsubscribe = onSnapshot(getHanziCollection(db.current), (snapshot) => {
+        const cloudData = [];
+        snapshot.forEach(doc => cloudData.push({ ...doc.data(), id: doc.id }));
+        cloudData.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+        setDatabase(cloudData);
+        if (!selectedChar && cloudData.length > 0) setSelectedChar(cloudData[0]);
     });
-    
     return () => unsubscribe();
-  }, []); 
+  }, [user]);
 
-  // 搜索过滤
+  // Custom words logic
+  useEffect(() => {
+    if (!db.current || !user) { setCustomWords([]); return; }
+     if (!user.isAnonymous) {
+        const unsubscribe = onSnapshot(getUserCustomCollection(db.current, user.uid), (snapshot) => {
+            const myWords = []; snapshot.forEach(doc => myWords.push({ ...doc.data(), id: doc.id }));
+            setCustomWords(myWords);
+        }, (error) => console.log("Private DB access denied or skipped"));
+        return () => unsubscribe();
+     }
+  }, [user]);
+
+  // Actions
+  const handleLogin = async () => {
+      if (!auth.current) { setIsManualAdmin(true); setIsAuthModalOpen(false); return; }
+      setIsProcessingAuth(true);
+      try { await signInWithPopup(auth.current, new GoogleAuthProvider()); } 
+      catch (error) { if(confirm("登录受阻。开启演示模式？")) setIsManualAdmin(true); }
+      setIsProcessingAuth(false);
+      setIsAuthModalOpen(false);
+  };
+  const handleLogout = async () => { 
+      if (auth.current) { await signOut(auth.current); await signInAnonymously(auth.current); } 
+      setIsFirebaseAdmin(false); setIsManualAdmin(false); 
+  };
+  const handleSaveToCloud = async (charData) => {
+    if (!db.current) return;
+    const docRef = doc(getHanziCollection(db.current), charData.char);
+    const saveData = { ...charData, updatedAt: new Date().toISOString(), updatedBy: user?.email || 'admin' };
+    delete saveData.id; await setDoc(docRef, saveData);
+    setLastMeta({ volume: charData.volume, lesson: charData.lesson });
+  };
+  const handleBatchImport = async (dataArray) => {
+      if (!db.current) return;
+      const batch = writeBatch(db.current);
+      const collRef = getHanziCollection(db.current);
+      let count = 0;
+      dataArray.forEach(item => {
+          if (!item.char) return;
+          const saveData = { ...item, updatedAt: new Date().toISOString() };
+          batch.set(doc(collRef, item.char), saveData);
+          count++;
+      });
+      await batch.commit();
+      alert(`Success: ${count}`);
+  };
+  const handleExport = async () => {
+      if (!db.current) return;
+      const snapshot = await getDocs(getHanziCollection(db.current));
+      const exportData = snapshot.docs.map(doc => { const d = doc.data(); delete d.updatedAt; delete d.updatedBy; return d; });
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = `hanzi_backup.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
+  const handleAddCustomWord = async (wordData) => {
+      if (!db.current || !user) return;
+      setIsCustomAdding(true);
+      try { await addDoc(getUserCustomCollection(db.current, user.uid), { ...wordData, createdAt: new Date().toISOString() }); } catch(e) { alert("Save failed"); } finally { setIsCustomAdding(false); }
+  };
+  const handleDeleteCustomWord = async (id) => { if (!db.current || !user) return; await deleteDoc(doc(getUserCustomCollection(db.current, user.uid), id)); };
+
+  // Game Handlers
+  const handleOpenGameSettings = (type) => {
+      setPendingGameType(type);
+      setIsGameSettingsOpen(true);
+  };
+
+  const handleStartGame = (type, settings) => {
+      const { count, filterVol, filterLesson, includeCustom, contentType } = settings;
+      let items = [...database];
+      if (filterVol !== 'all') items = items.filter(i => i.volume === filterVol);
+      if (filterLesson !== 'all') items = items.filter(i => i.lesson === filterLesson);
+      items = items.sort(() => Math.random() - 0.5).slice(0, count);
+
+      if (includeCustom && customWords.length > 0) {
+           const formattedCustom = customWords.map(w => ({ char: w.char, pinyin: w.pinyin, words: [w.char], sentences: [w.sentence], definition: w.definition, isCustom: true }));
+           items = [...formattedCustom, ...items];
+      }
+      if (items.length === 0) { alert("没有找到内容"); return; }
+      
+      setGameConfig({ type, items, contentType });
+      setIsGameSettingsOpen(false);
+  };
+
   const filteredData = useMemo(() => {
     if (!searchTerm) return [];
-    const lowerTerm = searchTerm.toLowerCase();
-    return database.filter(item => 
-      item.char.includes(lowerTerm) || 
-      item.pinyin.toLowerCase().includes(lowerTerm)
-    );
+    return database.filter(item => item.char.includes(searchTerm) || item.pinyin.toLowerCase().includes(searchTerm.toLowerCase()));
   }, [searchTerm, database]);
 
-  // 同步数据
-  const handleSyncData = async () => {
-    if (!confirm("确定要初始化数据库吗？这将把本地的原始数据上传到云端。")) return;
-    setIsSyncing(true);
-    try {
-        // 使用 Promise.all 避免批量写入限制
-        const lines = RAW_DATA_SOURCE.trim().split('\n');
-        let count = 0;
-        const promises = lines.map(async (line) => {
-            const parts = line.split(/[\t\s]+/).filter(p => p);
-            if (parts.length < 2) return;
-            const char = parts[0];
-            const richData = RICH_DATA_MAP.get(char);
-            const docData = {
-                char: parts[0],
-                pinyin: parts[1],
-                lesson: parts[2] || "-",
-                volume: parts[3] || "-",
-                definition: richData?.definition || "Chinese Character",
-                structure: richData?.structure || "汉字",
-                radical: richData?.radical || "-",
-                strokes: richData?.strokes || "-",
-                words: richData?.words || [],
-                sentences: richData?.sentences || [],
-                updatedAt: new Date()
-            };
-            await setDoc(doc(db, "characters", char), docData);
-            count++;
-        });
-
-        await Promise.all(promises);
-        alert(`同步完成！共上传了 ${count} 个汉字到云端数据库。`);
-    } catch (error) {
-        alert(`同步失败: ${error.message}`);
-    } finally {
-        setIsSyncing(false);
-    }
-  };
-
-  // API 搜索
-  const fetchCharacterFromApi = async (char) => {
-    if (!apiConfig.appId || !apiConfig.appSecret) {
-      alert("请先配置 API Key");
-      setIsSettingsOpen(true);
-      return;
-    }
-    setIsSearchingApi(true);
-    try {
-      const url = `https://www.mxnzp.com/api/convert/dictionary?content=${encodeURIComponent(char)}&app_id=${apiConfig.appId}&app_secret=${apiConfig.appSecret}`;
-      const response = await fetch(url);
-      const data = await response.json();
-
-      if (data.code === 1 && data.data && data.data.length > 0) {
-        const res = data.data[0]; 
-        const definition = res.explanation || "网络查询结果";
-        const newChar = {
-          char: char,
-          pinyin: res.pinyin || "未知",
-          lesson: 'Cloud',
-          volume: 'API',
-          definition: definition,
-          structure: "API数据", 
-          radical: res.radicals || "-", 
-          strokes: res.strokes || "-", 
-          words: ["暂无扩展词"], 
-          sentences: [], 
-          isCustom: true,
-          updatedAt: new Date()
-        };
-        await setDoc(doc(db, "characters", char), newChar);
-        alert("查询成功！已添加到本地字库。");
-      } else {
-        alert(`查询失败: ${data.msg || '未找到该字或接口异常'}`);
-      }
-    } catch (error) {
-      alert("网络请求失败");
-    } finally {
-      setIsSearchingApi(false);
-    }
-  };
-
-  const handleAddCharacter = async (newChar) => {
-    try {
-        await setDoc(doc(db, "characters", newChar.char), newChar);
-        alert("保存成功！");
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch (e) {
-        alert("保存失败: " + e.message);
-    }
-  };
-
-  const handleSelectChar = (char) => {
-    setSelectedChar(char);
-    setSearchTerm("");
-    setShowList(false);
-  };
-
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-20">
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} onSave={setApiConfig} onSync={handleSyncData} isSyncing={isSyncing} isConnected={isConnected} />
-      
-      <header className="bg-gradient-to-r from-teal-600 to-teal-800 text-white p-4 sticky top-0 z-50 shadow-lg">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm"><BookOpen size={24} className="text-white" /></div>
-            <div>
-                <h1 className="text-xl font-bold tracking-wide">汉字学习宝 (Winnie)</h1>
-                <div className="flex items-center gap-1.5 mt-1">
-                    <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></span>
-                    <p className="text-xs text-teal-100 opacity-80">{isConnected ? '已连接' : '未连接'}</p>
-                </div>
+    <div className="min-h-screen bg-[#f8fafc] font-sans text-slate-800 pb-20">
+      <header className="bg-teal-700 text-white p-4 sticky top-0 z-50 shadow-xl backdrop-blur-md bg-opacity-95">
+        <div className="max-w-6xl mx-auto flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 cursor-pointer" onClick={() => {setAppMode('learn'); setGameConfig(null);}}>
+                <BookOpen className="opacity-90" />
+                <h1 className="text-xl font-bold hidden sm:block">汉字学习宝</h1>
+            </div>
+            <div className="flex bg-teal-800/50 rounded-full p-1 ml-4">
+                <button onClick={() => { setAppMode('learn'); setGameConfig(null); }} className={`px-4 py-1 rounded-full text-sm font-bold transition ${appMode === 'learn' ? 'bg-white text-teal-700 shadow' : 'text-teal-200 hover:text-white'}`}>学习模式</button>
+                <button onClick={() => setAppMode('games')} className={`px-4 py-1 rounded-full text-sm font-bold transition ${appMode === 'games' ? 'bg-white text-teal-700 shadow' : 'text-teal-200 hover:text-white'}`}>游戏练习</button>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-             <div className="text-xs bg-black/20 px-3 py-1 rounded-full text-teal-50 font-mono border border-white/10 hidden sm:block">字数: {database.length}</div>
-             <button onClick={() => setIsSettingsOpen(true)} className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition"><Settings size={20} /></button>
+          <div className="flex items-center gap-4">
+             {isAdmin ? (
+                 <div className="flex items-center gap-2">
+                     <span className={`text-xs px-2 py-1 rounded font-bold shadow-sm hidden md:block ${isManualAdmin ? 'bg-orange-500 text-white' : 'bg-amber-500 text-white'}`}>{isManualAdmin ? "演示" : "管理"}</span>
+                     <button onClick={handleExport} className="p-2 bg-teal-600 rounded-lg hover:bg-teal-500" title="导出"><Download size={16} /></button>
+                     <button onClick={() => setIsImportModalOpen(true)} className="p-2 bg-indigo-500 rounded-lg hover:bg-indigo-600" title="导入"><UploadCloud size={16} /></button>
+                     <button onClick={() => { setEditingChar(null); setIsModalOpen(true); }} className="flex items-center gap-1 bg-white text-teal-700 px-3 py-1.5 rounded-lg font-bold shadow hover:bg-teal-50 text-sm"><PlusCircle size={16} /> 录入</button>
+                     <button onClick={handleLogout} className="text-teal-200 hover:text-white p-1"><LogOut size={20}/></button>
+                 </div>
+             ) : (
+                 <div className="flex gap-2">
+                    {!user?.isAnonymous && <button onClick={() => setIsCustomModalOpen(true)} className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold bg-teal-800/50 text-teal-200 hover:bg-teal-800 transition"><Crown size={16} /> 我的生词</button>}
+                    <button onClick={() => setIsAuthModalOpen(true)} className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold bg-teal-800/50 text-teal-200 hover:bg-teal-800 transition"><User size={16} /> 老师登录</button>
+                 </div>
+             )}
           </div>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto p-4 space-y-8">
+      <main className="max-w-6xl mx-auto p-4 space-y-6">
+        {appMode === 'games' ? (
+            gameConfig ? (
+                <div className="h-[80vh] bg-white rounded-3xl shadow-lg border border-slate-200 p-6 overflow-hidden">
+                    {gameConfig.type === 'splitMatch' && <SplitWordMatchGame items={gameConfig.items} onBack={() => setGameConfig(null)} />}
+                    {gameConfig.type === 'pinyinMatch' && <PinyinMatchGame items={gameConfig.items} onBack={() => setGameConfig(null)} contentType={gameConfig.contentType} />}
+                    {gameConfig.type === 'readMatch' && <ReadMatchGame items={gameConfig.items} onBack={() => setGameConfig(null)} />}
+                    {gameConfig.type === 'geneMatch' && <GeneMatchGame items={gameConfig.items} onBack={() => setGameConfig(null)} contentType={gameConfig.contentType} />}
+                    {gameConfig.type === 'flashcards' && <FlashCardGame items={gameConfig.items} onBack={() => setGameConfig(null)} db={db.current} contentType={gameConfig.contentType} />}
+                </div>
+            ) : <GameSelector onOpenSettings={handleOpenGameSettings} />
+        ) : (
+            <>
+                <div className="relative group z-40">
+                    <input type="text" placeholder="🔍 搜索生字..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onFocus={() => setShowList(true)} className="w-full pl-12 pr-4 py-4 rounded-2xl border-2 border-slate-200 focus:border-teal-500 focus:ring-4 focus:ring-teal-100 transition shadow-sm text-lg outline-none" />
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                    {showList && searchTerm && (
+                        <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-gray-100 max-h-80 overflow-y-auto z-50">
+                        {filteredData.map(item => (
+                            <div key={item.id} onClick={() => { setSelectedChar(item); setSearchTerm(""); setShowList(false); }} className="flex items-center p-4 hover:bg-teal-50 cursor-pointer border-b border-gray-50 last:border-0">
+                            <span className="w-10 h-10 rounded-lg bg-teal-100 text-teal-700 flex items-center justify-center text-xl font-bold mr-4 font-serif">{item.char}</span>
+                            <div><div className="font-bold flex items-center gap-2">{item.pinyin}</div><div className="text-xs text-gray-400">Vol {item.volume} • Lesson {item.lesson}</div></div>
+                            </div>
+                        ))}
+                        </div>
+                    )}
+                </div>
+                {selectedChar ? (
+                    <div className="grid lg:grid-cols-12 gap-6 animate-in slide-in-from-bottom-4 duration-500">
+                        <div className="lg:col-span-5">
+                            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex flex-col items-center sticky top-24">
+                                <div className="w-full flex justify-between items-center mb-6">
+                                    <h2 className="font-bold text-teal-800 flex items-center gap-2"><PenTool size={18} className="text-teal-600" /> 智能描红</h2>
+                                    <span className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-500 font-mono">第{selectedChar.volume}册 / 第{selectedChar.lesson}课</span>
+                                </div>
+                                <HanziWriterBoard char={selectedChar.char} />
+                            </div>
+                        </div>
+                        <div className="lg:col-span-7 flex flex-col gap-6">
+                            <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden group">
+                                {isAdmin && ( <div className="absolute top-4 right-4 flex gap-2 z-20"><button onClick={() => { setEditingChar(selectedChar); setIsModalOpen(true); }} className="p-2 bg-blue-100 text-blue-600 rounded-full hover:bg-blue-200 shadow-sm"><Edit3 size={18}/></button></div> )}
+                                <div className="relative z-10 flex gap-6">
+                                    <div onClick={() => speak(selectedChar.char)} className="w-28 h-28 bg-teal-600 rounded-2xl flex items-center justify-center text-white text-7xl font-serif shadow-xl shadow-teal-100 cursor-pointer hover:scale-105 transition">{selectedChar.char}</div>
+                                    <div>
+                                        <div className="flex items-baseline gap-3"><h1 className="text-5xl font-bold text-slate-800">{selectedChar.pinyin}</h1><Volume2 onClick={() => speak(selectedChar.char)} className="text-teal-500 cursor-pointer hover:text-teal-600" size={28} /></div>
+                                        <p className="text-lg text-slate-500 mt-1 mb-4">{selectedChar.definition || "暂无释义"}</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            <span className="badge flex items-center gap-1 bg-slate-100 px-2 py-1 rounded text-sm text-slate-600 border border-slate-200"><Layers size={14}/> {selectedChar.structure}</span>
+                                            <span className="badge flex items-center gap-1 bg-slate-100 px-2 py-1 rounded text-sm text-slate-600 border border-slate-200"><Type size={14}/> {selectedChar.radical}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {/* [改进] 通栏卡片式布局：上词下句 */}
+                            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 flex-1 overflow-hidden">
+                                <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                                    <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                                        <RefreshCcw className="text-amber-500" size={18}/> 扩展学习
+                                    </h3>
+                                </div>
+                                <div className="p-6 space-y-4">
+                                    {selectedChar.words && selectedChar.words.length > 0 ? (
+                                        selectedChar.words.map((w, i) => {
+                                            const sentence = selectedChar.sentences && selectedChar.sentences[i] ? selectedChar.sentences[i] : "暂无例句";
+                                            return (
+                                                <div key={i} className="group border border-slate-200 rounded-2xl overflow-hidden hover:shadow-lg hover:border-teal-200 transition-all duration-300 bg-white">
+                                                    {/* 上部分：词语 */}
+                                                    <div 
+                                                        className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center cursor-pointer group-hover:bg-teal-50/50 transition-colors" 
+                                                        onClick={() => speak(w)}
+                                                    >
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="bg-teal-600 text-white text-xs font-bold px-2 py-0.5 rounded">词语</span>
+                                                            <span className="text-xl font-bold text-slate-800 tracking-wide">{w}</span>
+                                                        </div>
+                                                        <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-teal-500 hover:bg-teal-500 hover:text-white transition shadow-sm">
+                                                            <Volume2 size={16} />
+                                                        </div>
+                                                    </div>
+                                                    {/* 下部分：例句 */}
+                                                    <div 
+                                                        className="p-5 cursor-pointer relative" 
+                                                        onClick={() => speak(sentence)}
+                                                    >
+                                                        <div className="absolute top-5 left-5 text-gray-300 select-none">
+                                                            <span className="text-4xl leading-none">“</span>
+                                                        </div>
+                                                        <p className="text-slate-600 leading-relaxed text-base pl-8 pr-2 pt-1 font-medium">
+                                                            {sentence}
+                                                        </p>
+                                                        <div className="mt-2 pl-8 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <span className="text-xs text-teal-500 font-bold flex items-center gap-1"><Volume2 size={12}/> 点击朗读例句</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })
+                                    ) : ( 
+                                        <div className="text-center text-gray-400 py-12 flex flex-col items-center gap-2">
+                                            <BookOpen size={32} className="opacity-20"/>
+                                            <span>暂无扩展内容</span>
+                                        </div> 
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex flex-col items-center justify-center h-96 text-gray-400 gap-4">
+                        <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center"><Cloud size={40} className="text-slate-300" /></div>
+                        <div className="text-center"><h3 className="text-lg font-bold text-gray-500">开始学习</h3><p className="text-sm">搜索或从数据库中选择汉字</p></div>
+                    </div>
+                )}
+            </>
+        )}
+
+        <AdminCharacterForm isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSaveToCloud} database={database} initialData={editingChar} lastMeta={lastMeta} />
+        <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} onLogin={handleLogin} isProcessing={isProcessingAuth} />
+        <CustomWordsModal isOpen={isCustomModalOpen} onClose={() => setIsCustomModalOpen(false)} customWords={customWords} onAdd={handleAddCustomWord} onDelete={handleDeleteCustomWord} isAdding={isCustomAdding} />
+        <ImportJsonModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onImport={handleBatchImport} />
+        <GameSettingsModal 
+            isOpen={isGameSettingsOpen} 
+            onClose={() => setIsGameSettingsOpen(false)} 
+            onStart={handleStartGame} 
+            database={database} 
+            userRole={user ? (ADMIN_EMAILS.includes(user.email) ? 'admin' : 'member') : 'visitor'} 
+            hasCustomWords={customWords.length > 0} 
+            gameType={pendingGameType} 
+        />
         
-        {/* 错误提示区 */}
-        {errorMsg && (
-             <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg flex items-center gap-2">
-                 <AlertCircle /> {errorMsg}
-             </div>
-        )}
-
-        {/* 数据库为空时的引导 */}
-        {database.length === 0 && isConnected && !isSyncing && !errorMsg && (
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-10 text-center flex flex-col items-center">
-                <Database size={48} className="text-blue-400 mb-4" />
-                <h2 className="text-xl font-bold text-blue-800 mb-2">数据库已连接，但没有数据</h2>
-                <p className="text-blue-600 mb-6 max-w-md">请点击下方按钮，将本地的生字表上传到云端。</p>
-                <button onClick={() => setIsSettingsOpen(true)} className="bg-blue-600 text-white px-8 py-3 rounded-full shadow-lg hover:bg-blue-700 hover:scale-105 transition font-bold flex items-center gap-2"><UploadCloud size={20} /> 去同步数据</button>
-            </div>
-        )}
-
-        {/* 搜索框 */}
-        <div className="relative">
-          <div className="relative group">
-            <input type="text" placeholder="🔍 搜索汉字..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onFocus={() => setShowList(true)} className="w-full pl-14 pr-4 py-4 rounded-2xl border-2 border-teal-100 focus:border-teal-500 outline-none shadow-sm text-lg bg-white" />
-            <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-teal-500"><Search size={20} /></div>
-          </div>
-          {showList && searchTerm && (
-            <div className="absolute top-full left-0 right-0 mt-3 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 max-h-96 overflow-y-auto divide-y divide-gray-50">
-              {filteredData.length > 0 ? filteredData.map(item => (
-                  <div key={item.char} onClick={() => handleSelectChar(item)} className="flex items-center justify-between p-4 hover:bg-teal-50 cursor-pointer"><div className="flex items-center gap-4"><div className="w-10 h-10 rounded-lg bg-teal-100 text-teal-700 flex items-center justify-center text-2xl font-serif font-bold">{item.char}</div><div><div className="font-bold text-gray-800">{item.pinyin}</div><div className="text-xs text-gray-400">{item.definition}</div></div></div></div>
-              )) : <div className="p-8 text-center text-gray-400 flex flex-col items-center gap-4"><p>本地未找到</p><button onClick={() => fetchCharacterFromApi(searchTerm)} disabled={isSearchingApi} className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2 rounded-full hover:scale-105 transition">{isSearchingApi ? <Loader2 className="animate-spin" /> : <Cloud size={20} />} 使用 API 搜索</button></div>}
-            </div>
-          )}
-        </div>
-
-        {/* 只有当选中了字才显示详情卡片 */}
-        {selectedChar && (
-        <div className="grid lg:grid-cols-12 gap-6">
-          <div className="lg:col-span-5 flex flex-col gap-4"><div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center justify-center min-h-[420px]"><HanziWriterBoard char={selectedChar.char} /></div></div>
-          <div className="lg:col-span-7 flex flex-col gap-6">
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden">
-                <div className="flex gap-6 items-center">
-                    <div className="w-24 h-24 bg-teal-600 rounded-2xl flex items-center justify-center text-white text-6xl font-serif shadow-lg cursor-pointer" onClick={() => speak(selectedChar.char)}>{selectedChar.char}</div>
-                    <div><div className="flex items-baseline gap-3 mb-1"><h2 className="text-4xl font-bold text-gray-800">{selectedChar.pinyin}</h2><button onClick={() => speak(selectedChar.char)} className="text-teal-500 p-1 rounded-full"><Volume2 size={24} /></button></div><ExpandableDefinition text={selectedChar.definition} />
-                    <div className="flex flex-wrap gap-2 mt-3">
-                        <span className="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded-md border">结构: {selectedChar.structure}</span>
-                        <span className="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded-md border">部首: {selectedChar.radical}</span>
-                        <span className="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded-md border">笔画: {selectedChar.strokes}</span>
-                        <span className="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded-md border">册: {selectedChar.volume}</span>
-                        <span className="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded-md border">课次: {selectedChar.lesson}</span>
-                    </div>
-                    </div>
-                </div>
-            </div>
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 flex-1 flex flex-col p-6">
-                <div className="grid sm:grid-cols-2 gap-8">
-                    <div className="space-y-4"><h4 className="text-xs font-bold text-gray-400 uppercase">Words</h4>{selectedChar.words && selectedChar.words.length > 0 ? selectedChar.words.map((w, i) => <div key={i} onClick={() => speak(w)} className="p-2 bg-slate-50 rounded cursor-pointer">{w}</div>) : <div className="text-sm text-gray-400 italic">暂无词组</div>}</div>
-                    <div className="space-y-4"><h4 className="text-xs font-bold text-gray-400 uppercase">Sentences</h4>{selectedChar.sentences && selectedChar.sentences.length > 0 ? selectedChar.sentences.map((s, i) => <div key={i} onClick={() => speak(s)} className="p-2 bg-amber-50 rounded cursor-pointer">{s}</div>) : <div className="text-sm text-gray-400 italic">暂无例句</div>}</div>
-                </div>
-            </div>
-          </div>
-        </div>
-        )}
-
-        {/* 底部表单 */}
-        <AddCharacterForm onAdd={handleAddCharacter} />
-
-        <div className="text-center text-gray-400 text-sm py-4 pb-10">
-          © 2023 Hanzi Learning App (Firebase Edition).
-        </div>
-
+        <div className="text-center text-slate-400 text-sm py-6">© 2023 汉字学习宝 • Learning & Games v2.6</div>
       </main>
     </div>
   );
